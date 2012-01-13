@@ -7,7 +7,7 @@ solution "OpenGL"
 
 -- ---------------------------------------------------------
 -- Project 
-	project "tessellation"
+	project "demo"
 		basedir "./"
 		language "C++"
 		location "./"
