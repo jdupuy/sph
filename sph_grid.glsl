@@ -1,8 +1,8 @@
 #version 420 core
 
 // images
-layout(r32i) coherent uniform iimage1D imgCells;
-layout(r32i) coherent uniform iimage1D imgParticles;
+layout(r32i) coherent uniform iimageBuffer imgCells;
+layout(r32i) coherent uniform iimageBuffer imgParticles;
 
 // uniforms
 uniform ivec3 uBucket1DCoeffs;
