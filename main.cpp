@@ -21,6 +21,7 @@
 
 
 // Standard librabries
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -32,13 +33,16 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-const float PI = 3.14159265;
-
 // Constants
+const float  PI = 3.14159265;
+const GLuint MAX_PARTICLE_COUNT = 512u*1024u;
+const Vector3 SIMULATION_DOMAIN = Vector3(1,1,1);
+
 enum // OpenGLNames
 {
 	// buffers
-	BUFFER_VERTEX_PARTICLES = 0,
+	BUFFER_POS_DENSITIES = 0,
+	BUFFER_VELOCITIES,
 	BUFFER_COUNT,
 
 	// vertex arrays
@@ -46,12 +50,14 @@ enum // OpenGLNames
 	VERTEX_ARRAY_COUNT,
 
 	// textures
-	TEXTURE_IMAGE_PARTICLES = 0,
-	TEXTURE_IMAGE_CELL,
+	TEXTURE_HEAD = 0,
+	TEXTURE_LIST,
+	TEXTURE_POS_DENSITIES,
+	TEXTURE_VELOCITIES,
 	TEXTURE_COUNT,
 
 	// programs
-	PROGRAM_PARTICLE_DENSITY_INIT = 0,
+	PROGRAM_SPH_DENSITY_INIT = 0,
 	PROGRAM_SPH_GRID,
 	PROGRAM_PARTICLE_RENDER,
 	PROGRAM_SIM_BOUNDS_RENDER,
@@ -63,6 +69,13 @@ GLuint *buffers      = NULL;
 GLuint *vertexArrays = NULL;
 GLuint *textures     = NULL;
 GLuint *programs     = NULL;
+
+// SPH variables
+float smoothingLength = 1.0f;
+float particleMass    = 1.0f;
+//float poly6Csts       =  315.0f/(64.0f*PI*pow(h,9.0f));
+//float gradPoly6Csts   = -945.0f/(32.0f*PI*pow(h,9.0f));
+//float 
 
 // Tools
 Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-5));
@@ -83,6 +96,18 @@ double framesPerSecond = 0.0; // fps
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+// precompute sph force constant components
+void set_sph_constants()
+{
+	float h6        = pow(smoothingLength,6.0f);
+	float h9        = pow(smoothingLength,9.0f);
+	float poly6     =  315.0f/(64.0f*PI*h9);
+	float gradPoly6 = -945.0f/(32.0f*PI*h9);
+	float gradSpiky = -45.0f/(PI*h6);
+	float grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
+
+	// set uniforms
+}
 
 #ifdef _ANT_ENABLE
 
@@ -106,12 +131,32 @@ void on_init()
 	for(GLuint i=0; i<PROGRAM_COUNT;++i)
 		programs[i] = glCreateProgram();
 
+	// textures
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_HEAD);
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_LIST);
+
 	// configure buffer objects
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES]);
+		glBufferData(GL_ARRAY_BUFFER,
+		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES]);
+		glBufferData(GL_ARRAY_BUFFER,
+		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	// configure vertex arrays
 
 
 	// configure programs
+	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
+	                       "sph_density_init.glsl",
+	                       "",
+	                       GL_TRUE);
+
 	fw::build_glsl_program(programs[PROGRAM_SPH_GRID],
 	                       "sph_grid.glsl",
 	                       "",
@@ -180,7 +225,6 @@ void on_update()
 	cameraProjection.FitHeightToAspect(aspect);
 	Matrix4x4 mvp = cameraProjection.ExtractTransformMatrix()
 	              * invCameraWorld.ExtractTransformMatrix();
-
 
 	// set viewport
 	glViewport(0,0,windowWidth, windowHeight);
