@@ -1,8 +1,8 @@
 #version 420 core
 
 // images
-layout(r32i) coherent uniform iimageBuffer imgCells;
-layout(r32i) coherent uniform iimageBuffer imgParticles;
+layout(r32i) coherent uniform iimageBuffer imgHead;
+layout(r32i) coherent uniform iimageBuffer imgList;
 
 // uniforms
 uniform ivec3 uBucket1DCoeffs;
@@ -25,12 +25,12 @@ void main()
 	             + bucket3D.z * uBucket1DCoeffs.z;
 
 	// check position in grid
-	int index = imageAtomicCompSwap(imgCells,
+	int index = imageAtomicCompSwap(imgHead,
 	                                bucket1D,
 	                                -1,
 	                                gl_VertexID);
 	while(index != gl_VertexID)
-		index = imageAtomicCompSwap(imgParticles,
+		index = imageAtomicCompSwap(imgList,
 		                            index,
 		                            -1,
 		                            gl_VertexID);

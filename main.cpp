@@ -4,7 +4,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // enable gui
-#define _ANT_ENABLE
+//#define _ANT_ENABLE
 
 // GL libraries
 #include "glew.hpp"
@@ -18,7 +18,6 @@
 #include "Algebra.hpp"      // Basic algebra library
 #include "Transform.hpp"    // Basic transformations
 #include "Framework.hpp"    // utility classes/functions
-
 
 // Standard librabries
 #include <cmath>
@@ -35,29 +34,44 @@
 
 // Constants
 const float  PI = 3.14159265;
-const GLuint MAX_PARTICLE_COUNT = 512u*1024u;
-const Vector3 SIMULATION_DOMAIN = Vector3(1,1,1);
+const GLuint MAX_PARTICLE_COUNT  = 512u*1024u;
+const Vector3 SIMULATION_DOMAIN  = Vector3(0.5f,0.5f,0.5f);
+const float MIN_SMOOTHING_LENGTH = 0.005f;
 
 enum // OpenGLNames
 {
 	// buffers
-	BUFFER_POS_DENSITIES = 0,
-	BUFFER_VELOCITIES,
+	BUFFER_POS_DENSITIES_PING = 0,
+	BUFFER_POS_DENSITIES_PONG,
+	BUFFER_VELOCITIES_PING,
+	BUFFER_VELOCITIES_PONG,
+	BUFFER_HEAD,
+	BUFFER_LIST,
 	BUFFER_COUNT,
 
 	// vertex arrays
-	VERTEX_ARRAY_PARTICLES = 0,
+	VERTEX_ARRAY_CELL_INIT = 0,
 	VERTEX_ARRAY_COUNT,
 
 	// textures
 	TEXTURE_HEAD = 0,
 	TEXTURE_LIST,
-	TEXTURE_POS_DENSITIES,
-	TEXTURE_VELOCITIES,
+	TEXTURE_POS_DENSITIES_PING,
+	TEXTURE_POS_DENSITIES_PONG,
+	TEXTURE_VELOCITIES_PING,
+	TEXTURE_VELOCITIES_PONG,
 	TEXTURE_COUNT,
+
+	// transform feedbacks
+	TRANSFORM_FEEDBACK_HEAD = 0,
+	TRANSFORM_FEEDBACK_LIST,
+	TRANSFORM_FEEDBACK_PARTICLE_PING,
+	TRANSFORM_FEEDBACK_PARTICLE_PONG,
+	TRANSFORM_FEEDBACK_COUNT,
 
 	// programs
 	PROGRAM_SPH_DENSITY_INIT = 0,
+	PROGRAM_SPH_CELL_INIT,
 	PROGRAM_SPH_GRID,
 	PROGRAM_PARTICLE_RENDER,
 	PROGRAM_SIM_BOUNDS_RENDER,
@@ -69,13 +83,14 @@ GLuint *buffers      = NULL;
 GLuint *vertexArrays = NULL;
 GLuint *textures     = NULL;
 GLuint *programs     = NULL;
+GLuint *transformFeedbacks = NULL;
 
 // SPH variables
-float smoothingLength = 1.0f;
-float particleMass    = 1.0f;
-//float poly6Csts       =  315.0f/(64.0f*PI*pow(h,9.0f));
-//float gradPoly6Csts   = -945.0f/(32.0f*PI*pow(h,9.0f));
-//float 
+GLfloat smoothingLength = 1.0f;
+GLfloat particleMass    = 1.0f;
+GLuint   particleCount  = 1024u;
+GLuint   cellCount      = 2048u;
+GLint sphPingpong       = 0;
 
 // Tools
 Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-5));
@@ -99,15 +114,65 @@ double framesPerSecond = 0.0; // fps
 // precompute sph force constant components
 void set_sph_constants()
 {
-	float h6        = pow(smoothingLength,6.0f);
-	float h9        = pow(smoothingLength,9.0f);
-	float poly6     =  315.0f/(64.0f*PI*h9);
-	float gradPoly6 = -945.0f/(32.0f*PI*h9);
-	float gradSpiky = -45.0f/(PI*h6);
-	float grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
+//	GLfloat h6        = pow(smoothingLength,6.0f);
+//	GLfloat h9        = pow(smoothingLength,9.0f);
+//	GLfloat poly6     =  315.0f/(64.0f*PI*h9);
+//	GLfloat gradPoly6 = -945.0f/(32.0f*PI*h9);
+//	GLfloat gradSpiky = -45.0f/(PI*h6);
+//	GLfloat grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
 
 	// set uniforms
 }
+
+// initialize the particles
+void init_sph_particles()
+{
+//	std::vector<Vector4> positions;
+//	std::vector<Vector4> velocities;
+
+//	positions.reserve(particleCount);
+//	velocities.reserve(particleCount);
+
+//	GLint i=0;
+//	while(i<particleCount)
+//	{
+//		
+//		++i;
+//	}
+
+}
+
+// initialize cells
+void init_sph_cells()
+{
+	glEnable(GL_RASTERIZER_DISCARD);
+	glUseProgram(programs[PROGRAM_SPH_CELL_INIT]);
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_CELL_INIT]);
+
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_HEAD]);
+	glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, cellCount/4);
+	glEndTransformFeedback();
+
+	glFinish(); // apparently, this is mandatory on AMD11.12...
+
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_LIST]);
+	glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, particleCount/4);
+	glEndTransformFeedback();
+
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+	glDisable(GL_RASTERIZER_DISCARD);
+}
+
+// compute densities
+void init_sph_density()
+{
+	
+}
+
 
 #ifdef _ANT_ENABLE
 
@@ -123,33 +188,143 @@ void on_init()
 	vertexArrays = new GLuint[VERTEX_ARRAY_COUNT];
 	textures     = new GLuint[TEXTURE_COUNT];
 	programs     = new GLuint[PROGRAM_COUNT];
+	transformFeedbacks = new GLuint[TRANSFORM_FEEDBACK_COUNT];
 
 	// gen names
 	glGenBuffers(BUFFER_COUNT, buffers);
 	glGenVertexArrays(VERTEX_ARRAY_COUNT, vertexArrays);
 	glGenTextures(TEXTURE_COUNT, textures);
+	glGenTransformFeedbacks(TRANSFORM_FEEDBACK_COUNT, transformFeedbacks);
 	for(GLuint i=0; i<PROGRAM_COUNT;++i)
 		programs[i] = glCreateProgram();
 
-	// textures
-	glActiveTexture(GL_TEXTURE0 + TEXTURE_HEAD);
-	glActiveTexture(GL_TEXTURE0 + TEXTURE_LIST);
-
 	// configure buffer objects
-	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES]);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES_PING]);
 		glBufferData(GL_ARRAY_BUFFER,
 		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
 		             NULL,
 		             GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES]);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES_PONG]);
+		glBufferData(GL_ARRAY_BUFFER,
+		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PING]);
+		glBufferData(GL_ARRAY_BUFFER,
+		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PONG]);
 		glBufferData(GL_ARRAY_BUFFER,
 		             sizeof(Vector4)*MAX_PARTICLE_COUNT,
 		             NULL,
 		             GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
+		glBufferData(GL_TEXTURE_BUFFER,
+		             sizeof(GLint)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_LIST]);
+		glBufferData(GL_TEXTURE_BUFFER,
+		             sizeof(GLint)*MAX_PARTICLE_COUNT,
+		             NULL,
+		             GL_STATIC_DRAW);
+	glBindBuffer(GL_TEXTURE_BUFFER, 0);
+
+	// textures
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_HEAD);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_HEAD]);
+		glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, buffers[BUFFER_HEAD]);
+
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_LIST);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_LIST]);
+		glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, buffers[BUFFER_LIST]);
+
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_POS_DENSITIES_PING);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_POS_DENSITIES_PING]);
+		glTexBuffer(GL_TEXTURE_BUFFER,
+		            GL_RGBA32F,
+		            buffers[BUFFER_POS_DENSITIES_PING]);
+
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_POS_DENSITIES_PONG);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_POS_DENSITIES_PONG]);
+		glTexBuffer(GL_TEXTURE_BUFFER,
+		            GL_RGBA32F,
+		            buffers[BUFFER_POS_DENSITIES_PONG]);
+
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_VELOCITIES_PING);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_VELOCITIES_PING]);
+		glTexBuffer(GL_TEXTURE_BUFFER,
+		            GL_RGBA32F,
+		            buffers[BUFFER_VELOCITIES_PING]);
+
+	glActiveTexture(GL_TEXTURE0 + TEXTURE_VELOCITIES_PONG);
+		glBindTexture(GL_TEXTURE_BUFFER, textures[TEXTURE_VELOCITIES_PONG]);
+		glTexBuffer(GL_TEXTURE_BUFFER,
+		            GL_RGBA32F,
+		            buffers[BUFFER_VELOCITIES_PONG]);
+
+	glBindImageTexture(TEXTURE_HEAD,
+	                   textures[TEXTURE_HEAD],
+	                   0,
+	                   GL_FALSE,
+	                   0,
+	                   GL_READ_WRITE,
+	                   GL_R32I);
+
+	glBindImageTexture(TEXTURE_LIST,
+	                   textures[TEXTURE_LIST],
+	                   0,
+	                   GL_FALSE,
+	                   0,
+	                   GL_READ_WRITE,
+	                   GL_R32I);
 
 	// configure vertex arrays
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_CELL_INIT]);
+	glBindVertexArray(0);
 
+	// transform feedbacks
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_HEAD]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_HEAD],
+		                  0,
+		                  fw::next_power_of_two(cellCount * sizeof(GLint)));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_LIST]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_LIST],
+		                  0,
+		                  fw::next_power_of_two(particleCount * sizeof(GLint)));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PONG],
+		                  0,
+		                  fw::next_power_of_two(particleCount*sizeof(Vector4)));
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  1,
+		                  buffers[BUFFER_VELOCITIES_PONG],
+		                  0,
+		                  fw::next_power_of_two(particleCount*sizeof(Vector4)));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PONG]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PING],
+		                  0,
+		                  fw::next_power_of_two(particleCount*sizeof(Vector4)));
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  1,
+		                  buffers[BUFFER_VELOCITIES_PING],
+		                  0,
+		                  fw::next_power_of_two(particleCount*sizeof(Vector4)));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,0);
 
 	// configure programs
 	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -157,15 +332,58 @@ void on_init()
 	                       "",
 	                       GL_TRUE);
 
+	fw::build_glsl_program(programs[PROGRAM_SPH_CELL_INIT],
+	                       "sph_cell_init.glsl",
+	                       "",
+	                       GL_FALSE);
+	const GLchar* varyings1[] = {"oData"};
+	glTransformFeedbackVaryings(programs[PROGRAM_SPH_CELL_INIT],
+	                            1,
+	                            varyings1,
+	                            GL_INTERLEAVED_ATTRIBS);
+	glLinkProgram(programs[PROGRAM_SPH_CELL_INIT]);
+
 	fw::build_glsl_program(programs[PROGRAM_SPH_GRID],
 	                       "sph_grid.glsl",
 	                       "",
 	                       GL_TRUE);
 
+//	// Set uniforms
+//	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
+//	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+//	                                        "imgHead"),
+//	                   TEXTURE_HEAD);
+//	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
+//	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+//	                                        "imgList"),
+//	                   TEXTURE_LIST);
+
+	// test
+	init_sph_cells();
+//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
+//	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
+//	                                        0,
+//	                                        sizeof(GLint)*cellCount,
+//	                                        GL_MAP_READ_BIT);
+//	for(GLuint i=0; i<cellCount; ++i)
+//		std::cout << ptr[i] << ' ';
+//	std::cout << std::endl;
+//	glUnmapBuffer(GL_TEXTURE_BUFFER);
+//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_LIST]);
+//	ptr        = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
+//	                                        0,
+//	                                        sizeof(GLint)*particleCount,
+//	                                        GL_MAP_READ_BIT);
+//	for(GLuint i=0; i<particleCount; ++i)
+//		std::cout << ptr[i] << ' ';
+//	std::cout << std::endl;
+//	glUnmapBuffer(GL_TEXTURE_BUFFER);
+//	glBindBuffer(GL_TEXTURE_BUFFER, 0);
+
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glClearColor(0.13,0.13,0.15,1.0);
-	glPatchParameteri(GL_PATCH_VERTICES, 3);
+
 
 #ifdef _ANT_ENABLE
 	// start ant
@@ -174,7 +392,6 @@ void on_init()
 	TwGLUTModifiersFunc(glutGetModifiers);
 
 #endif // _ANT_ENABLE
-
 	fw::check_gl_error();
 }
 
@@ -187,6 +404,7 @@ void on_clean()
 	glDeleteBuffers(BUFFER_COUNT, buffers);
 	glDeleteVertexArrays(VERTEX_ARRAY_COUNT, vertexArrays);
 	glDeleteTextures(TEXTURE_COUNT, textures);
+	glDeleteTransformFeedbacks(TRANSFORM_FEEDBACK_COUNT, transformFeedbacks);
 	for(GLuint i=0; i<PROGRAM_COUNT;++i)
 		glDeleteProgram(programs[i]);
 
@@ -195,6 +413,7 @@ void on_clean()
 	delete[] vertexArrays;
 	delete[] textures;
 	delete[] programs;
+	delete[] transformFeedbacks;
 
 #ifdef _ANT_ENABLE
 	TwTerminate();
@@ -354,7 +573,7 @@ void on_mouse_wheel(GLint wheel, GLint direction, GLint x, GLint y)
 int main(int argc, char** argv)
 {
 	const GLuint CONTEXT_MAJOR = 4;
-	const GLuint CONTEXT_MINOR = 1;
+	const GLuint CONTEXT_MINOR = 2;
 
 	// init glut
 	glutInit(&argc, argv);
@@ -363,7 +582,7 @@ int main(int argc, char** argv)
 	glutInitContextFlags(GLUT_DEBUG);
 	glutInitContextProfile(GLUT_COMPATIBILITY_PROFILE);
 #else
-	glutInitContextFlags(GLUT_DEBUG | GLUT_FORWARD_COMPATIBLE);
+	glutInitContextFlags(GLUT_DEBUG);
 	glutInitContextProfile(GLUT_CORE_PROFILE);
 #endif
 
@@ -371,7 +590,7 @@ int main(int argc, char** argv)
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
 	glutInitWindowSize(800, 600);
 	glutInitWindowPosition(0, 0);
-	glutCreateWindow("Sph - OpenGL4.2");
+	glutCreateWindow("SPH solver");
 
 	// init glew
 	GLenum err = glewInit();
@@ -386,6 +605,7 @@ int main(int argc, char** argv)
 	// glewInit generates an INVALID_ENUM error for some reason...
 	glGetError();
 
+	fw::check_gl_error();
 	// set callbacks
 	glutCloseFunc(&on_clean);
 	glutReshapeFunc(&on_resize);

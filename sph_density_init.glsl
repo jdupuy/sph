@@ -8,7 +8,7 @@ layout(r32i) readonly uniform iimageBuffer imgList;
 uniform samplerBuffer sParticlePos;
 
 // uniforms
-uniform vec3 uBucket1DCoeffs;
+uniform vec3  uBucket1DCoeffs;
 uniform vec3  uBucketTexelSize;
 uniform vec3  uBucketBoundsMin;
 uniform float uSmoothingLengthSquared;
@@ -18,7 +18,7 @@ uniform float uDensityConstants;
 #ifdef _VERTEX_
 
 layout(location=0) in  vec4 iData;  // position + density
-layout(location=0) out vec4 oData;
+layout(location=0) out vec4 oData;  // velocity
 
 // evaluate density
 float eval_density(float densityCst, float h2, vec3 ri, vec3 rj)
