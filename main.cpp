@@ -1,5 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 // \author   Jonathan Dupuy
+// \brief    An SPH solver, running on the GPU via OpenGL4.2 and GLSL420.
+//
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,9 +36,11 @@
 
 // Constants
 const float  PI = 3.14159265;
-const GLuint MAX_PARTICLE_COUNT  = 512u*1024u;
-const Vector3 SIMULATION_DOMAIN  = Vector3(0.5f,0.5f,0.5f);
-const float MIN_SMOOTHING_LENGTH = 0.005f;
+const GLuint MAX_PARTICLE_COUNT     = 512u*1024u;
+const Vector3 SIMULATION_DOMAIN     = Vector3(0.5f,0.5f,0.5f);
+const float MIN_SMOOTHING_LENGTH    = 0.005f;
+const Vector3 BUCKET_MAX_RESOLUTION = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
+                                    + Vector3(2,2,2); // border cells
 
 enum // OpenGLNames
 {
@@ -88,8 +92,8 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = 1.0f;
 GLfloat particleMass    = 1.0f;
-GLuint   particleCount  = 1024u;
-GLuint   cellCount      = 2048u;
+GLuint particleCount    = 1024u;
+GLuint cellCount        = 2048u; // depends on smoothing length
 GLint sphPingpong       = 0;
 
 // Tools
@@ -592,6 +596,7 @@ int main(int argc, char** argv)
 	glutCreateWindow("SPH solver");
 
 	// init glew
+
 	glewExperimental = GL_TRUE; // segfault on GenVertexArrays on Nvidia otherwise
 	GLenum err = glewInit();
 	if(GLEW_OK != err)
