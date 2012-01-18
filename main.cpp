@@ -176,7 +176,6 @@ void init_sph_density()
 
 #ifdef _ANT_ENABLE
 
-
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -348,15 +347,15 @@ void on_init()
 	                       "",
 	                       GL_TRUE);
 
-//	// Set uniforms
-//	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
-//	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
-//	                                        "imgHead"),
-//	                   TEXTURE_HEAD);
-//	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
-//	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
-//	                                        "imgList"),
-//	                   TEXTURE_LIST);
+	// Set uniforms
+	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+	                                        "imgHead"),
+	                   TEXTURE_HEAD);
+	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+	                                        "imgList"),
+	                   TEXTURE_LIST);
 
 	// test
 	init_sph_cells();
@@ -573,7 +572,7 @@ void on_mouse_wheel(GLint wheel, GLint direction, GLint x, GLint y)
 int main(int argc, char** argv)
 {
 	const GLuint CONTEXT_MAJOR = 4;
-	const GLuint CONTEXT_MINOR = 2;
+	const GLuint CONTEXT_MINOR = 1;
 
 	// init glut
 	glutInit(&argc, argv);
@@ -593,6 +592,7 @@ int main(int argc, char** argv)
 	glutCreateWindow("SPH solver");
 
 	// init glew
+	glewExperimental = GL_TRUE; // segfault on GenVertexArrays on Nvidia otherwise
 	GLenum err = glewInit();
 	if(GLEW_OK != err)
 	{
