@@ -38,7 +38,7 @@
 const float  PI = 3.14159265;
 const GLuint MAX_PARTICLE_COUNT     = 512u*1024u;
 const Vector3 SIMULATION_DOMAIN     = Vector3(0.5f,0.5f,0.5f);
-const float MIN_SMOOTHING_LENGTH    = 0.005f;
+const float MIN_SMOOTHING_LENGTH    = 0.005f; // meters
 const Vector3 BUCKET_MAX_RESOLUTION = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
                                     + Vector3(2,2,2); // border cells
 
@@ -90,10 +90,11 @@ GLuint *programs     = NULL;
 GLuint *transformFeedbacks = NULL;
 
 // SPH variables
-GLfloat smoothingLength = 1.0f;
-GLfloat particleMass    = 1.0f;
-GLuint particleCount    = 1024u;
-GLuint cellCount        = 2048u; // depends on smoothing length
+GLfloat smoothingLength = 1.0f;  // grams
+GLfloat particleMass    = 1.0f;  // grams
+GLuint particleCount    = 1024u; // number of particles
+GLuint cellCount        = 2048u; // number of cells
+Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingpong       = 0;
 
 // Tools

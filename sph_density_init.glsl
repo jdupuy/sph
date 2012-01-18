@@ -17,8 +17,8 @@ uniform float uDensityConstants;
 
 #ifdef _VERTEX_
 
-layout(location=0) in  vec4 iData;  // position + density
-layout(location=0) out vec4 oData;  // velocity
+layout(location=0) in  vec4 iData;  // position + reserved
+layout(location=0) out vec4 oData;  // position + density
 
 // evaluate density
 float eval_density(float densityCst, float h2, vec3 ri, vec3 rj)
