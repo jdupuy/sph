@@ -2,7 +2,6 @@
 // \author   Jonathan Dupuy
 // \brief    An SPH solver, running on the GPU via OpenGL4.2 and GLSL420.
 //
-//
 ////////////////////////////////////////////////////////////////////////////////
 
 // enable gui
@@ -239,24 +238,6 @@ void set_runtime_constant_uniforms()
 	                   TEXTURE_LIST);
 }
 
-// initialize the particles
-void init_sph_particles()
-{
-//	const float PARTICLE_SPACING = 0.01f; // in meters
-//	std::vector<Vector4> positions;
-//	std::vector<Vector4> velocities;
-
-//	positions.reserve(particleCount);
-//	velocities.reserve(particleCount);
-
-//	GLuint i=0;
-//	while(i<particleCount)
-//	{
-//		
-//		++i;
-//	}
-}
-
 // initialize cells
 void init_sph_cells()
 {
@@ -285,7 +266,47 @@ void init_sph_cells()
 // compute densities
 void init_sph_density()
 {
-	
+	// set cells
+	init_sph_cells();
+
+	// run density kernel compute
+}
+
+// initialize the particles
+void init_sph_particles()
+{
+	const float PARTICLE_SPACING = 0.01f; // in meters
+	std::vector<Vector4> positions;
+	std::vector<Vector4> velocities;
+
+	positions.reserve(particleCount);
+	velocities.reserve(particleCount);
+
+	GLuint i=0;
+	while(i<particleCount)
+	{
+		positions.push_back(Vector4(i*0.001f,0,0,0));
+		velocities.push_back(Vector4::ZERO);
+		++i;
+	}
+
+	// send data to buffer
+	glBindBuffer(GL_ARRAY_BUFFER, 
+	             buffers[BUFFER_POS_DENSITIES_PING + sphPingPong]);
+		glBufferSubData(GL_ARRAY_BUFFER,
+		                0,
+		                sizeof(Vector4)*particleCount,
+		                &positions[0]);
+	glBindBuffer(GL_ARRAY_BUFFER,
+	             buffers[BUFFER_VELOCITIES_PING + sphPingPong]);
+		glBufferSubData(GL_ARRAY_BUFFER,
+		                0,
+		                sizeof(Vector4)*particleCount,
+		                &velocities[0]);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	// pre compute densities 
+	init_sph_density();
 }
 
 
@@ -527,8 +548,12 @@ std::cout << BUCKET_1D_MAX << std::endl;
 	set_grid_params();
 	set_sph_constants();
 
-	// test
-	init_sph_cells();
+
+	// set particles
+	init_sph_particles();
+
+//	// test
+//	init_sph_cells();
 //	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
 //	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
 //	                                        0,
@@ -621,6 +646,12 @@ void on_update()
 	// update transforms
 	glProgramUniformMatrix4fv(programs[PROGRAM_CUBE_RENDER],
 	                          glGetUniformLocation(programs[PROGRAM_CUBE_RENDER],
+	                                               "uModelViewProjection"),
+	                          1,
+	                          0,
+	                          reinterpret_cast<const float * >(&mvp));
+	glProgramUniformMatrix4fv(programs[PROGRAM_FLUID_RENDER],
+	                          glGetUniformLocation(programs[PROGRAM_FLUID_RENDER],
 	                                               "uModelViewProjection"),
 	                          1,
 	                          0,
