@@ -5,9 +5,9 @@ layout(r32i) coherent uniform iimageBuffer imgHead;
 layout(r32i) coherent uniform iimageBuffer imgList;
 
 // uniforms
-uniform ivec3 uBucket1DCoeffs;
-uniform vec3  uBucketTexelSize;
-uniform vec3  uBucketBoundsMin;
+uniform vec3 uBucket1dCoeffs;
+uniform vec3 uBucket3dSize;
+uniform vec3 uBucketBoundsMin;
 
 #ifdef _VERTEX_
 
@@ -17,16 +17,14 @@ void main()
 {
 	// 3d bucket texture (in [0,D]x[0,W]x[0,H])
 	vec3 relPos    = iData.xyz - uBucketBoundsMin;
-	ivec3 bucket3D = ivec3(relPos / uBucketTexelSize);
+	ivec3 bucket3d = ivec3(relPos / uBucket3dSize);
 
 	// 1d bucket pos (no dot products for ivec...)
-	int bucket1D = bucket3D.x * uBucket1DCoeffs.x
-	             + bucket3D.y * uBucket1DCoeffs.y
-	             + bucket3D.z * uBucket1DCoeffs.z;
+	int bucket1d = int(dot(bucket3d, uBucket1dCoeffs));
 
 	// check position in grid
 	int index = imageAtomicCompSwap(imgHead,
-	                                bucket1D,
+	                                bucket1d,
 	                                -1,
 	                                gl_VertexID);
 	while(index != gl_VertexID)
