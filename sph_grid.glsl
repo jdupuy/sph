@@ -32,8 +32,6 @@ void main()
 		                            index,
 		                            -1,
 		                            gl_VertexID);
-
-	imageAtomicCompSwap(imgHead, gl_VertexID, -1, gl_VertexID);
 }
 
 #endif // _VERTEX_

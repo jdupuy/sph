@@ -36,9 +36,9 @@
 // Constants
 const float  PI = 3.14159265f;
 const GLuint MAX_PARTICLE_COUNT = 256u*1024u; // maximum number of particless
-const Vector3 SIMULATION_DOMAIN = Vector3(0.5f,0.5f,0.5f); // meters
+const Vector3 SIMULATION_DOMAIN = Vector3(50.0f,25.0f,25.0f); // centimeters
 const Vector3 SIM_BOUNDS_MIN    = -0.5f*SIMULATION_DOMAIN;
-const float MIN_SMOOTHING_LENGTH = 0.025f;                   // meters
+const float MIN_SMOOTHING_LENGTH = 1.25f;                   // centimeters
 const Vector3 BUCKET_3D_MAX   = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
                               + Vector3(2,2,2); // border cells
 const GLuint  BUCKET_1D_MAX   = BUCKET_3D_MAX[0]
@@ -89,6 +89,7 @@ enum // OpenGLNames
 	PROGRAM_SPH_GRID,
 	PROGRAM_FLUID_RENDER,
 	PROGRAM_CUBE_RENDER,
+	PROGRAM_BUCKET_RENDER,
 	PROGRAM_COUNT
 };
 
@@ -100,19 +101,19 @@ GLuint *programs     = NULL;
 GLuint *transformFeedbacks = NULL;
 
 // SPH variables
-GLfloat smoothingLength = MIN_SMOOTHING_LENGTH;  // meters
+GLfloat smoothingLength = MIN_SMOOTHING_LENGTH*4.0f;  // centimeters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = 16;//MAX_PARTICLE_COUNT / 2;           // number of particles
-GLuint cellCount        = BUCKET_1D_MAX;   // number of cells
+GLuint particleCount    = 1024; //MAX_PARTICLE_COUNT / 2;           // number of particles
+GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingPong       = 0;
 
 // Tools
-Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-1));
+Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-100));
 Projection cameraProjection = Projection::Perspective(PI*0.35f,
                                                       1.0f,
-                                                      0.0125f,
-                                                      64.0f);
+                                                      1.0f,
+                                                      400.0f);
 
 bool mouseLeft  = false;
 bool mouseRight = false;
@@ -125,6 +126,7 @@ double secondsPerFrame = 0.0; // spf
 // Functions
 //
 ////////////////////////////////////////////////////////////////////////////////
+
 
 // get the size of the 3d bucket
 Vector3 get_bucket_3d_size()
@@ -164,6 +166,10 @@ void set_grid_params()
 	                                         "uBucket3dSize"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket3d));
+	glProgramUniform2i(programs[PROGRAM_BUCKET_RENDER],
+	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
+	                                        "uBucket3dSize"),
+	                   bucket3d[0], bucket3d[1]);
 
 	// set 1d
 	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -176,6 +182,13 @@ void set_grid_params()
 	                                         "uBucket1dCoeffs"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
+
+	// set cell size
+	glProgramUniform4f(programs[PROGRAM_BUCKET_RENDER],
+	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
+	                                        "uCellSize"),
+	                    smoothingLength, smoothingLength, smoothingLength, 1);
+
 }
 
 
@@ -190,8 +203,12 @@ void set_sph_constants()
 	GLfloat gradSpiky = -45.0f/(PI*h6);
 	GLfloat grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
 	const Vector3 SIM_MIN  = SIM_BOUNDS_MIN
-	                       - Vector3::CompDiv(SIMULATION_DOMAIN,   // add extra cells
-	                                          get_bucket_3d_size());
+	                       - Vector3(smoothingLength,
+	                                 smoothingLength,
+	                                 smoothingLength);
+
+	std::cout << "h6: " << h6 << std::endl;
+	std::cout << "h9: " << h9 << std::endl;
 
 	// set masses
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -231,6 +248,13 @@ void set_sph_constants()
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
 	                    const_cast<Vector3 *>(&SIM_MIN)));
+	glProgramUniform4f(programs[PROGRAM_BUCKET_RENDER],
+	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
+	                                        "uBucketBoundsMin"),
+	                   SIM_MIN[0]+smoothingLength*0.5f,
+	                   SIM_MIN[1]+smoothingLength*0.5f,
+	                   SIM_MIN[2]+smoothingLength*0.5f,
+	                   0);
 
 	// build grid
 	set_grid_params();
@@ -306,15 +330,15 @@ void build_grid()
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
 		glDrawArrays(GL_POINTS, 0, particleCount);
 
-	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
-	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
-	                                        0,
-	                                        sizeof(GLint)*cellCount,
-	                                        GL_MAP_READ_BIT);
-	for(GLuint i=0; i<cellCount; ++i)
-		if(ptr[i] > -1) std::cout << ptr[i] << ' ';
-	std::cout << std::endl;
-	glUnmapBuffer(GL_TEXTURE_BUFFER);
+//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
+//	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
+//	                                        0,
+//	                                        sizeof(GLint)*cellCount,
+//	                                        GL_MAP_READ_BIT);
+//	for(GLuint i=0; i<particleCount; ++i)
+//		if(ptr[i] > -1) std::cout <<"i: " << i << ' '<< ptr[i] << '\n';
+//	std::cout << std::endl;
+//	glUnmapBuffer(GL_TEXTURE_BUFFER);
 
 	glDisable(GL_RASTERIZER_DISCARD);
 	std::cout << "done\n";
@@ -332,20 +356,24 @@ void init_sph_density()
 //	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
 //	glDrawArrays(GL_POINTS, 0, particleCount);
 //	glDisable(GL_RASTERIZER_DISCARD);
+
+	// back to default vertex array
+	glBindVertexArray(0);
 }
 
 // initialize the particles
 void init_sph_particles()
 {
 	// variables / constants
-	const float PARTICLE_SPACING = 0.006f; // in meters
+	const float PARTICLE_SPACING = 1.00f; // in centimeters
+//	const float PARTICLE_SPACING = 0.006f; // in meters
 	GLuint xCnt = SIMULATION_DOMAIN[0]*0.5f / PARTICLE_SPACING;
 	GLuint zCnt = SIMULATION_DOMAIN[2]*0.5f / PARTICLE_SPACING;
 	GLuint yCnt = particleCount / (xCnt*zCnt)
 	            + pow(particleCount % (xCnt*zCnt),0.25f); // rest
 	Vector3 min = SIM_BOUNDS_MIN
 	            + Vector3(SIMULATION_DOMAIN[0]*0.25f,
-	                      4.0f*PARTICLE_SPACING,
+	                      2.0f*PARTICLE_SPACING,
 	                      SIMULATION_DOMAIN[2]*0.25f);
 	std::vector<Vector4> positions;
 	std::vector<Vector4> velocities;
@@ -468,7 +496,7 @@ void on_init()
 		             GL_STATIC_DRAW);
 	glBindBuffer(GL_TEXTURE_BUFFER, 0);
 
-std::cout << BUCKET_1D_MAX << std::endl;
+	std::cout << "BUCKET_1D_MAX " << BUCKET_1D_MAX << std::endl;
 
 	// textures
 	glActiveTexture(GL_TEXTURE0 + TEXTURE_HEAD);
@@ -553,6 +581,48 @@ std::cout << BUCKET_1D_MAX << std::endl;
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CUBE_INDEXES]);
 	glBindVertexArray(0);
 
+	// configure programs
+	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
+	                       "sph_density_init.glsl",
+	                       "",
+	                       GL_TRUE);
+
+
+	fw::build_glsl_program(programs[PROGRAM_SPH_CELL_INIT],
+	                       "sph_cell_init.glsl",
+	                       "",
+	                       GL_FALSE);
+	const GLchar* varyings1[] = {"oData"};
+	glTransformFeedbackVaryings(programs[PROGRAM_SPH_CELL_INIT],
+	                            1,
+	                            varyings1,
+	                            GL_INTERLEAVED_ATTRIBS);
+	glLinkProgram(programs[PROGRAM_SPH_CELL_INIT]);
+
+	fw::build_glsl_program(programs[PROGRAM_SPH_GRID],
+	                       "sph_grid.glsl",
+	                       "",
+	                       GL_TRUE);
+
+	fw::build_glsl_program(programs[PROGRAM_FLUID_RENDER],
+	                       "sph_render.glsl",
+	                       "",
+	                       GL_TRUE);
+
+	fw::build_glsl_program(programs[PROGRAM_CUBE_RENDER],
+	                       "cube.glsl",
+	                       "",
+	                       GL_TRUE);
+
+	fw::build_glsl_program(programs[PROGRAM_BUCKET_RENDER],
+	                       "sph_bucket_render.glsl",
+	                       "",
+	                       GL_TRUE);
+
+	// set constants
+	set_runtime_constant_uniforms();
+	set_sph_constants();
+
 	// transform feedbacks
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
 	                        transformFeedbacks[TRANSFORM_FEEDBACK_HEAD]);
@@ -594,68 +664,11 @@ std::cout << BUCKET_1D_MAX << std::endl;
 		                  particleCount*sizeof(Vector4));
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,0);
 
-	// configure programs
-	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
-	                       "sph_density_init.glsl",
-	                       "",
-	                       GL_TRUE);
-
-
-	fw::build_glsl_program(programs[PROGRAM_SPH_CELL_INIT],
-	                       "sph_cell_init.glsl",
-	                       "",
-	                       GL_FALSE);
-	const GLchar* varyings1[] = {"oData"};
-	glTransformFeedbackVaryings(programs[PROGRAM_SPH_CELL_INIT],
-	                            1,
-	                            varyings1,
-	                            GL_INTERLEAVED_ATTRIBS);
-	glLinkProgram(programs[PROGRAM_SPH_CELL_INIT]);
-
-	fw::build_glsl_program(programs[PROGRAM_SPH_GRID],
-	                       "sph_grid.glsl",
-	                       "",
-	                       GL_TRUE);
-
-	fw::build_glsl_program(programs[PROGRAM_FLUID_RENDER],
-	                       "sph_render.glsl",
-	                       "",
-	                       GL_TRUE);
-
-	fw::build_glsl_program(programs[PROGRAM_CUBE_RENDER],
-	                       "cube.glsl",
-	                       "",
-	                       GL_TRUE);
-
-	// set constants
-	set_runtime_constant_uniforms();
-	set_sph_constants();
-
 	// set particles
 	init_sph_particles();
 
-//	// test
-//	init_sph_cells();
-//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
-//	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
-//	                                        0,
-//	                                        sizeof(GLint)*cellCount,
-//	                                        GL_MAP_READ_BIT);
-//	for(GLuint i=0; i<cellCount; ++i)
-//		std::cout << ptr[i] << ' ';
-//	std::cout << std::endl;
-//	glUnmapBuffer(GL_TEXTURE_BUFFER);
-//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_LIST]);
-//	ptr        = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
-//	                                        0,
-//	                                        sizeof(GLint)*particleCount,
-//	                                        GL_MAP_READ_BIT);
-//	for(GLuint i=0; i<particleCount; ++i)
-//		std::cout << ptr[i] << ' ';
-//	std::cout << std::endl;
-//	glUnmapBuffer(GL_TEXTURE_BUFFER);
-//	glBindBuffer(GL_TEXTURE_BUFFER, 0);
 
+	// set global params
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glClearColor(0.13,0.13,0.15,1.0);
@@ -737,6 +750,12 @@ void on_update()
 	                          1,
 	                          0,
 	                          reinterpret_cast<const float * >(&mvp));
+	glProgramUniformMatrix4fv(programs[PROGRAM_BUCKET_RENDER],
+	                          glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
+	                                               "uModelViewProjection"),
+	                          1,
+	                          0,
+	                          reinterpret_cast<const float * >(&mvp));
 
 	// set viewport
 	glViewport(0,0,windowWidth, windowHeight);
@@ -751,6 +770,14 @@ void on_update()
 	               24,
 	               GL_UNSIGNED_SHORT,
 	               FW_BUFFER_OFFSET(0));
+
+	// render cells
+	glUseProgram(programs[PROGRAM_BUCKET_RENDER]);
+	glDrawElementsInstanced(GL_LINES,
+	                        24,
+	                        GL_UNSIGNED_SHORT,
+	                        FW_BUFFER_OFFSET(0),
+	                        cellCount);
 
 	// render particles
 	glUseProgram(programs[PROGRAM_FLUID_RENDER]);
@@ -807,6 +834,11 @@ void on_key_down(GLubyte key, GLint x, GLint y)
 		                         0,
 		                         glutGet(GLUT_WINDOW_WIDTH),
 		                         glutGet(GLUT_WINDOW_HEIGHT));
+	if(key=='r')
+	{
+		++smoothingLength;
+		set_sph_constants();
+	}
 }
 
 
@@ -830,9 +862,9 @@ void on_mouse_button(GLint button, GLint state, GLint x, GLint y)
 		mouseRight &= button == GLUT_RIGHT_BUTTON ? false : mouseRight;
 	}
 	if(button == 3)
-		invCameraWorld.TranslateWorld(Vector3(0,0,0.15f));
+		invCameraWorld.TranslateWorld(Vector3(0,0,15.0f));
 	if(button == 4)
-		invCameraWorld.TranslateWorld(Vector3(0,0,-0.15f));
+		invCameraWorld.TranslateWorld(Vector3(0,0,-15.0f));
 }
 
 
@@ -859,8 +891,8 @@ void on_mouse_motion(GLint x, GLint y)
 	}
 	if(mouseRight)
 	{
-		invCameraWorld.TranslateWorld(Vector3( 0.01f*MOUSE_XREL,
-		                                      -0.01f*MOUSE_YREL,
+		invCameraWorld.TranslateWorld(Vector3( 0.61f*MOUSE_XREL,
+		                                      -0.61f*MOUSE_YREL,
 		                                       0));
 	}
 }
