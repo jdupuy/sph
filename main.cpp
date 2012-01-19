@@ -36,7 +36,7 @@
 // Constants
 const float  PI = 3.14159265f;
 const GLuint MAX_PARTICLE_COUNT = 256u*1024u; // maximum number of particless
-const Vector3 SIMULATION_DOMAIN = Vector3(50.0f,25.0f,25.0f); // centimeters
+const Vector3 SIMULATION_DOMAIN = Vector3(50.0f,50.0f,50.0f); // centimeters
 const Vector3 SIM_BOUNDS_MIN    = -0.5f*SIMULATION_DOMAIN;
 const float MIN_SMOOTHING_LENGTH = 1.25f;                   // centimeters
 const Vector3 BUCKET_3D_MAX   = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
@@ -101,12 +101,13 @@ GLuint *programs     = NULL;
 GLuint *transformFeedbacks = NULL;
 
 // SPH variables
-GLfloat smoothingLength = MIN_SMOOTHING_LENGTH*4.0f;  // centimeters
+GLfloat smoothingLength = MIN_SMOOTHING_LENGTH*2.0f;  // centimeters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = 1024; //MAX_PARTICLE_COUNT / 2;           // number of particles
+GLuint particleCount    = MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingPong       = 0;
+bool renderBucket       = false;
 
 // Tools
 Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-100));
@@ -155,17 +156,16 @@ void set_grid_params()
 	// set global variables
 	cellCount = get_bucket_1d_size();
 
+	std::cout << "bucket X Y Z "
+	          << bucket3d[0]
+	          << ' '
+	          << bucket3d[1]
+	          << ' '
+	          << bucket3d[2]
+	          << '\n';
+	std::cout << "cellcount " << cellCount << std::endl;
+
 	// set 3d
-	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
-	                                         "uBucket3dSize"),
-	                    1,
-	                    reinterpret_cast<GLfloat*>(&bucket3d));
-	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
-	                                         "uBucket3dSize"),
-	                    1,
-	                    reinterpret_cast<GLfloat*>(&bucket3d));
 	glProgramUniform2i(programs[PROGRAM_BUCKET_RENDER],
 	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
 	                                        "uBucket3dSize"),
@@ -184,10 +184,18 @@ void set_grid_params()
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
 
 	// set cell size
-	glProgramUniform4f(programs[PROGRAM_BUCKET_RENDER],
+	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                        "uBucketCellSize"),
+	                   smoothingLength);
+	glProgramUniform1f(programs[PROGRAM_SPH_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	                                        "uBucketCellSize"),
+	                   smoothingLength);
+	glProgramUniform1f(programs[PROGRAM_BUCKET_RENDER],
 	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
-	                                        "uCellSize"),
-	                    smoothingLength, smoothingLength, smoothingLength, 1);
+	                                        "uBucketCellSize"),
+	                    smoothingLength);
 
 }
 
@@ -198,9 +206,9 @@ void set_sph_constants()
 	GLfloat h2        = smoothingLength*smoothingLength;
 	GLfloat h6        = pow(smoothingLength,6.0f); // mind precision !!
 	GLfloat h9        = pow(smoothingLength,9.0f);
-	GLfloat poly6     =  315.0f/(64.0f*PI*h9);
-	GLfloat gradPoly6 = -945.0f/(32.0f*PI*h9);
-	GLfloat gradSpiky = -45.0f/(PI*h6);
+	GLfloat poly6     = ( 315.0f/h9)/(64.0f*PI);
+	GLfloat gradPoly6 = (-945.0f/h9)/(32.0f*PI);
+	GLfloat gradSpiky = (-45.0f/h6)/PI;
 	GLfloat grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
 	const Vector3 SIM_MIN  = SIM_BOUNDS_MIN
 	                       - Vector3(smoothingLength,
@@ -209,6 +217,10 @@ void set_sph_constants()
 
 	std::cout << "h6: " << h6 << std::endl;
 	std::cout << "h9: " << h9 << std::endl;
+	std::cout << "poly6: " << poly6 << std::endl;
+	std::cout << "gradPoly6: " << gradPoly6 << std::endl;
+	std::cout << "gradSpiky: " << gradSpiky << std::endl;
+	std::cout << "grad2Viscosity: " << grad2Viscosity << std::endl;
 
 	// set masses
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -248,13 +260,12 @@ void set_sph_constants()
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
 	                    const_cast<Vector3 *>(&SIM_MIN)));
-	glProgramUniform4f(programs[PROGRAM_BUCKET_RENDER],
+	glProgramUniform3f(programs[PROGRAM_BUCKET_RENDER],
 	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
 	                                        "uBucketBoundsMin"),
 	                   SIM_MIN[0]+smoothingLength*0.5f,
 	                   SIM_MIN[1]+smoothingLength*0.5f,
-	                   SIM_MIN[2]+smoothingLength*0.5f,
-	                   0);
+	                   SIM_MIN[2]+smoothingLength*0.5f);
 
 	// build grid
 	set_grid_params();
@@ -335,13 +346,14 @@ void build_grid()
 //	                                        0,
 //	                                        sizeof(GLint)*cellCount,
 //	                                        GL_MAP_READ_BIT);
+//	std::cout << "checking..\n";
 //	for(GLuint i=0; i<particleCount; ++i)
 //		if(ptr[i] > -1) std::cout <<"i: " << i << ' '<< ptr[i] << '\n';
 //	std::cout << std::endl;
 //	glUnmapBuffer(GL_TEXTURE_BUFFER);
 
 	glDisable(GL_RASTERIZER_DISCARD);
-	std::cout << "done\n";
+//	std::cout << "done\n";
 }
 
 // compute densities
@@ -365,8 +377,7 @@ void init_sph_density()
 void init_sph_particles()
 {
 	// variables / constants
-	const float PARTICLE_SPACING = 1.00f; // in centimeters
-//	const float PARTICLE_SPACING = 0.006f; // in meters
+	const float PARTICLE_SPACING = 0.6f; // in meters
 	GLuint xCnt = SIMULATION_DOMAIN[0]*0.5f / PARTICLE_SPACING;
 	GLuint zCnt = SIMULATION_DOMAIN[2]*0.5f / PARTICLE_SPACING;
 	GLuint yCnt = particleCount / (xCnt*zCnt)
@@ -772,12 +783,15 @@ void on_update()
 	               FW_BUFFER_OFFSET(0));
 
 	// render cells
-	glUseProgram(programs[PROGRAM_BUCKET_RENDER]);
-	glDrawElementsInstanced(GL_LINES,
-	                        24,
-	                        GL_UNSIGNED_SHORT,
-	                        FW_BUFFER_OFFSET(0),
-	                        cellCount);
+	if(renderBucket)
+	{
+		glUseProgram(programs[PROGRAM_BUCKET_RENDER]);
+		glDrawElementsInstanced(GL_LINES,
+		                        24,
+		                        GL_UNSIGNED_SHORT,
+		                        FW_BUFFER_OFFSET(0),
+		                        cellCount);
+	}
 
 	// render particles
 	glUseProgram(programs[PROGRAM_FLUID_RENDER]);
@@ -839,6 +853,8 @@ void on_key_down(GLubyte key, GLint x, GLint y)
 		++smoothingLength;
 		set_sph_constants();
 	}
+	if(key=='b')
+		renderBucket = !renderBucket;
 }
 
 
@@ -932,7 +948,7 @@ int main(int argc, char** argv)
 
 	// build window
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
-	glutInitWindowSize(800, 600);
+	glutInitWindowSize(1024, 768);
 	glutInitWindowPosition(0, 0);
 	glutCreateWindow("SPH solver");
 
