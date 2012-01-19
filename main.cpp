@@ -102,7 +102,7 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = MIN_SMOOTHING_LENGTH;  // meters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = 1;//MAX_PARTICLE_COUNT / 2;           // number of particles
+GLuint particleCount    = 16;//MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = BUCKET_1D_MAX;   // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingPong       = 0;
@@ -132,12 +132,14 @@ Vector3 get_bucket_3d_size()
 	return (SIMULATION_DOMAIN/smoothingLength).Ceil() + Vector3(2.0f,2.0f,2.0f);
 }
 
+
 // get the size of the 1d bucket
 GLuint get_bucket_1d_size()
 {
 	Vector3 bucket3d = get_bucket_3d_size();
 	return bucket3d[0]*bucket3d[1]*bucket3d[2];
 }
+
 
 // compute grid params and send to programs
 void set_grid_params()
@@ -147,6 +149,9 @@ void set_grid_params()
 	Vector3 bucket1dCoeffs(1,
 	                       bucket3d[0],
 	                       bucket3d[0]*bucket3d[1]);
+
+	// set global variables
+	cellCount = get_bucket_1d_size();
 
 	// set 3d
 	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -173,6 +178,7 @@ void set_grid_params()
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
 }
 
+
 // precompute sph force constant components and send to programs
 void set_sph_constants()
 {
@@ -186,20 +192,6 @@ void set_sph_constants()
 	const Vector3 SIM_MIN  = SIM_BOUNDS_MIN
 	                       - Vector3::CompDiv(SIMULATION_DOMAIN,   // add extra cells
 	                                          get_bucket_3d_size());
-
-//	std::cout << SIM_BOUNDS_MIN[0]
-//	          << ' '
-//	          << SIM_BOUNDS_MIN[1]
-//	          << ' '
-//	          << SIM_BOUNDS_MIN[2]
-//	          << std::endl;
-
-//	std::cout << SIM_MIN[0]
-//	          << ' '
-//	          << SIM_MIN[1]
-//	          << ' '
-//	          << SIM_MIN[2]
-//	          << std::endl;
 
 	// set masses
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -239,38 +231,11 @@ void set_sph_constants()
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
 	                    const_cast<Vector3 *>(&SIM_MIN)));
+
+	// build grid
+	set_grid_params();
 }
 
-// set runtime constants
-void set_runtime_constant_uniforms()
-{
-	// set cube
-	glProgramUniform4f(programs[PROGRAM_CUBE_RENDER],
-	                   glGetUniformLocation(programs[PROGRAM_CUBE_RENDER],
-	                                        "uCubeSize"),
-	                   SIMULATION_DOMAIN[0],
-	                   SIMULATION_DOMAIN[1],
-	                   SIMULATION_DOMAIN[2],
-	                   1.0f);
-
-	// set images
-	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
-	                                        "imgHead"),
-	                   TEXTURE_HEAD);
-	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
-	                                        "imgList"),
-	                   TEXTURE_LIST);
-	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
-	                                        "imgHead"),
-	                   TEXTURE_HEAD);
-	glProgramUniform1i(programs[PROGRAM_SPH_CELL_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
-	                                        "imgList"),
-	                   TEXTURE_LIST);
-}
 
 // initialize cells (rasterizer must be disabled)
 void init_sph_cells()
@@ -295,6 +260,39 @@ void init_sph_cells()
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
 }
 
+
+// set runtime constants (called only once)
+void set_runtime_constant_uniforms()
+{
+	// set cube
+	glProgramUniform4f(programs[PROGRAM_CUBE_RENDER],
+	                   glGetUniformLocation(programs[PROGRAM_CUBE_RENDER],
+	                                        "uCubeSize"),
+	                   SIMULATION_DOMAIN[0],
+	                   SIMULATION_DOMAIN[1],
+	                   SIMULATION_DOMAIN[2],
+	                   1.0f);
+
+	// set images
+	glProgramUniform1i(programs[PROGRAM_SPH_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	                                        "imgHead"),
+	                   TEXTURE_HEAD);
+	glProgramUniform1i(programs[PROGRAM_SPH_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	                                        "imgList"),
+	                   TEXTURE_LIST);
+	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                        "imgHead"),
+	                   TEXTURE_HEAD);
+	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                        "imgList"),
+	                   TEXTURE_LIST);
+}
+
+
 // set particles to grid
 void build_grid()
 {
@@ -306,7 +304,17 @@ void build_grid()
 	// compute
 	glUseProgram(programs[PROGRAM_SPH_GRID]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
-//		glDrawArrays(GL_POINTS, 0, particleCount);
+		glDrawArrays(GL_POINTS, 0, particleCount);
+
+	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
+	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
+	                                        0,
+	                                        sizeof(GLint)*cellCount,
+	                                        GL_MAP_READ_BIT);
+	for(GLuint i=0; i<cellCount; ++i)
+		if(ptr[i] > -1) std::cout << ptr[i] << ' ';
+	std::cout << std::endl;
+	glUnmapBuffer(GL_TEXTURE_BUFFER);
 
 	glDisable(GL_RASTERIZER_DISCARD);
 	std::cout << "done\n";
@@ -621,9 +629,7 @@ std::cout << BUCKET_1D_MAX << std::endl;
 
 	// set constants
 	set_runtime_constant_uniforms();
-	set_grid_params();
 	set_sph_constants();
-
 
 	// set particles
 	init_sph_particles();

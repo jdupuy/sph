@@ -27,11 +27,13 @@ void main()
 	                                bucket1d,
 	                                -1,
 	                                gl_VertexID);
-	while(index != gl_VertexID)
+	while(index != -1)
 		index = imageAtomicCompSwap(imgList,
 		                            index,
 		                            -1,
 		                            gl_VertexID);
+
+	imageAtomicCompSwap(imgHead, gl_VertexID, -1, gl_VertexID);
 }
 
 #endif // _VERTEX_
