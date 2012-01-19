@@ -61,6 +61,8 @@ enum // OpenGLNames
 	// vertex arrays
 	VERTEX_ARRAY_CELL_INIT = 0,
 	VERTEX_ARRAY_CUBE,
+	VERTEX_ARRAY_POS_DENSITY_PING,
+	VERTEX_ARRAY_POS_DENSITY_PONG,
 	VERTEX_ARRAY_FLUID_RENDER_PING,
 	VERTEX_ARRAY_FLUID_RENDER_PONG,
 	VERTEX_ARRAY_COUNT,
@@ -100,7 +102,7 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = MIN_SMOOTHING_LENGTH;  // meters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = MAX_PARTICLE_COUNT / 2;           // number of particles
+GLuint particleCount    = 1;//MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = BUCKET_1D_MAX;   // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingPong       = 0;
@@ -152,10 +154,20 @@ void set_grid_params()
 	                                         "uBucket3dSize"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket3d));
+	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
+	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	                                         "uBucket3dSize"),
+	                    1,
+	                    reinterpret_cast<GLfloat*>(&bucket3d));
 
 	// set 1d
 	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
 	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                         "uBucket1dCoeffs"),
+	                    1,
+	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
+	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
+	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
 	                                         "uBucket1dCoeffs"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
@@ -173,7 +185,21 @@ void set_sph_constants()
 	GLfloat grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
 	const Vector3 SIM_MIN  = SIM_BOUNDS_MIN
 	                       - Vector3::CompDiv(SIMULATION_DOMAIN,   // add extra cells
-	                                         get_bucket_3d_size());
+	                                          get_bucket_3d_size());
+
+//	std::cout << SIM_BOUNDS_MIN[0]
+//	          << ' '
+//	          << SIM_BOUNDS_MIN[1]
+//	          << ' '
+//	          << SIM_BOUNDS_MIN[2]
+//	          << std::endl;
+
+//	std::cout << SIM_MIN[0]
+//	          << ' '
+//	          << SIM_MIN[1]
+//	          << ' '
+//	          << SIM_MIN[2]
+//	          << std::endl;
 
 	// set masses
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -203,6 +229,12 @@ void set_sph_constants()
 	                    const_cast<Vector3 *>(&SIM_MIN)));
 	glProgramUniform3fv(programs[PROGRAM_SPH_CELL_INIT],
 	                    glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+	                                         "uBucketBoundsMin"),
+	                    1,
+	                    reinterpret_cast<GLfloat *>(
+	                    const_cast<Vector3 *>(&SIM_MIN)));
+	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
+	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
 	                                         "uBucketBoundsMin"),
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
@@ -240,10 +272,9 @@ void set_runtime_constant_uniforms()
 	                   TEXTURE_LIST);
 }
 
-// initialize cells
+// initialize cells (rasterizer must be disabled)
 void init_sph_cells()
 {
-	glEnable(GL_RASTERIZER_DISCARD);
 	glUseProgram(programs[PROGRAM_SPH_CELL_INIT]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_CELL_INIT]);
 
@@ -262,16 +293,37 @@ void init_sph_cells()
 	glEndTransformFeedback();
 
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+}
+
+// set particles to grid
+void build_grid()
+{
+	glEnable(GL_RASTERIZER_DISCARD);
+
+	// empty cells
+	init_sph_cells();
+
+	// compute
+	glUseProgram(programs[PROGRAM_SPH_GRID]);
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
+//		glDrawArrays(GL_POINTS, 0, particleCount);
+
 	glDisable(GL_RASTERIZER_DISCARD);
+	std::cout << "done\n";
 }
 
 // compute densities
 void init_sph_density()
 {
-	// set cells
-	init_sph_cells();
+	// build grid
+	build_grid();
 
 	// run density kernel compute
+//	glEnable(GL_RASTERIZER_DISCARD);
+//	glUseProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
+//	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
+//	glDrawArrays(GL_POINTS, 0, particleCount);
+//	glDisable(GL_RASTERIZER_DISCARD);
 }
 
 // initialize the particles
@@ -307,7 +359,7 @@ void init_sph_particles()
 			}
 
 	// send data to buffers
-	glBindBuffer(GL_ARRAY_BUFFER, 
+	glBindBuffer(GL_ARRAY_BUFFER,
 	             buffers[BUFFER_POS_DENSITIES_PING + sphPingPong]);
 		glBufferSubData(GL_ARRAY_BUFFER,
 		                0,
@@ -467,6 +519,14 @@ std::cout << BUCKET_1D_MAX << std::endl;
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CUBE_VERTICES]);
 		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CUBE_INDEXES]);
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING]);
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES_PING]);
+		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PONG]);
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_POS_DENSITIES_PONG]);
+		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING]);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
