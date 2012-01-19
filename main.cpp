@@ -34,9 +34,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // Constants
-const float  PI = 3.14159265;
-const GLuint MAX_PARTICLE_COUNT = 512u*1024u; // maximum number of particless
+const float  PI = 3.14159265f;
+const GLuint MAX_PARTICLE_COUNT = 256u*1024u; // maximum number of particless
 const Vector3 SIMULATION_DOMAIN = Vector3(0.5f,0.5f,0.5f); // meters
+const Vector3 SIM_BOUNDS_MIN    = -0.5f*SIMULATION_DOMAIN;
 const float MIN_SMOOTHING_LENGTH = 0.025f;                   // meters
 const Vector3 BUCKET_3D_MAX   = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
                               + Vector3(2,2,2); // border cells
@@ -99,7 +100,7 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = MIN_SMOOTHING_LENGTH;  // meters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = 1024u;           // number of particles
+GLuint particleCount    = MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = BUCKET_1D_MAX;   // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
 GLint sphPingPong       = 0;
@@ -170,6 +171,9 @@ void set_sph_constants()
 	GLfloat gradPoly6 = -945.0f/(32.0f*PI*h9);
 	GLfloat gradSpiky = -45.0f/(PI*h6);
 	GLfloat grad2Viscosity = -gradSpiky; /* = 45.0f/(PI*h6); */
+	const Vector3 SIM_MIN  = SIM_BOUNDS_MIN
+	                       - Vector3::CompDiv(SIMULATION_DOMAIN,   // add extra cells
+	                                         get_bucket_3d_size());
 
 	// set masses
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -188,14 +192,26 @@ void set_sph_constants()
 	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
 	                                        "uDensityConstants"),
 	                   poly6 * particleMass);
+
+
+	// set min bounds of simulation
+	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
+	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                         "uBucketBoundsMin"),
+	                    1,
+	                    reinterpret_cast<GLfloat *>(
+	                    const_cast<Vector3 *>(&SIM_MIN)));
+	glProgramUniform3fv(programs[PROGRAM_SPH_CELL_INIT],
+	                    glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+	                                         "uBucketBoundsMin"),
+	                    1,
+	                    reinterpret_cast<GLfloat *>(
+	                    const_cast<Vector3 *>(&SIM_MIN)));
 }
 
 // set runtime constants
 void set_runtime_constant_uniforms()
 {
-	// constants / variables
-	const Vector3 SIM_BOUNDS_MIN = -0.5f*SIMULATION_DOMAIN;
-
 	// set cube
 	glProgramUniform4f(programs[PROGRAM_CUBE_RENDER],
 	                   glGetUniformLocation(programs[PROGRAM_CUBE_RENDER],
@@ -204,20 +220,6 @@ void set_runtime_constant_uniforms()
 	                   SIMULATION_DOMAIN[1],
 	                   SIMULATION_DOMAIN[2],
 	                   1.0f);
-
-	// set min bounds of simulation
-	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
-	                                         "uBucketBoundsMin"),
-	                    1,
-	                    reinterpret_cast<GLfloat *>(
-	                    const_cast<Vector3 *>(&SIM_BOUNDS_MIN)));
-	glProgramUniform3fv(programs[PROGRAM_SPH_CELL_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
-	                                         "uBucketBoundsMin"),
-	                    1,
-	                    reinterpret_cast<GLfloat *>(
-	                    const_cast<Vector3 *>(&SIM_BOUNDS_MIN)));
 
 	// set images
 	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -251,7 +253,7 @@ void init_sph_cells()
 		glDrawArrays(GL_POINTS, 0, cellCount/4);
 	glEndTransformFeedback();
 
-	glFinish(); // apparently, this is mandatory on AMD11.12...
+	glFinish(); // apparently, this is mandatory on AMD11.12
 
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
 	                        transformFeedbacks[TRANSFORM_FEEDBACK_LIST]);
@@ -275,22 +277,36 @@ void init_sph_density()
 // initialize the particles
 void init_sph_particles()
 {
-	const float PARTICLE_SPACING = 0.01f; // in meters
+	// variables / constants
+	const float PARTICLE_SPACING = 0.006f; // in meters
+	GLuint xCnt = SIMULATION_DOMAIN[0]*0.5f / PARTICLE_SPACING;
+	GLuint zCnt = SIMULATION_DOMAIN[2]*0.5f / PARTICLE_SPACING;
+	GLuint yCnt = particleCount / (xCnt*zCnt)
+	            + pow(particleCount % (xCnt*zCnt),0.25f); // rest
+	Vector3 min = SIM_BOUNDS_MIN
+	            + Vector3(SIMULATION_DOMAIN[0]*0.25f,
+	                      4.0f*PARTICLE_SPACING,
+	                      SIMULATION_DOMAIN[2]*0.25f);
 	std::vector<Vector4> positions;
 	std::vector<Vector4> velocities;
 
+	// reserve memory
 	positions.reserve(particleCount);
 	velocities.reserve(particleCount);
 
-	GLuint i=0;
-	while(i<particleCount)
-	{
-		positions.push_back(Vector4(i*0.001f,0,0,0));
-		velocities.push_back(Vector4::ZERO);
-		++i;
-	}
+	// set positions
+	for(GLuint y=0; y<yCnt; ++y)
+		for(GLuint x=0; x<xCnt; ++x)
+			for(GLuint z=0; z<zCnt; ++z)
+			{
+				positions.push_back(Vector4(min[0]+x*PARTICLE_SPACING,
+				                            min[1]+y*PARTICLE_SPACING,
+				                            min[2]+z*PARTICLE_SPACING,
+				                            0));
+				velocities.push_back(Vector4::ZERO);
+			}
 
-	// send data to buffer
+	// send data to buffers
 	glBindBuffer(GL_ARRAY_BUFFER, 
 	             buffers[BUFFER_POS_DENSITIES_PING + sphPingPong]);
 		glBufferSubData(GL_ARRAY_BUFFER,
@@ -305,7 +321,7 @@ void init_sph_particles()
 		                &velocities[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	// pre compute densities 
+	// pre compute densities
 	init_sph_density();
 }
 
@@ -577,7 +593,6 @@ std::cout << BUCKET_1D_MAX << std::endl;
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glClearColor(0.13,0.13,0.15,1.0);
-
 
 #ifdef _ANT_ENABLE
 	// start ant
