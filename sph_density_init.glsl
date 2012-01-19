@@ -9,10 +9,9 @@ uniform samplerBuffer sParticlePos;
 
 // uniforms
 uniform vec3  uBucket1dCoeffs;    // for conversion from bucket 3d to bucket 1d
-uniform float uBucketCellSize;      // dimensions of the bucket
+uniform float uBucketCellSize;    // dimensions of the bucket
 uniform vec3  uBucketBoundsMin;   // constant
 uniform float uSmoothingLengthSquared;
-uniform float uParticleMass;
 uniform float uDensityConstants;
 
 #ifdef _VERTEX_
@@ -21,11 +20,11 @@ layout(location=0) in  vec4 iData;  // position + reserved
 layout(location=0) out vec4 oData;  // position + density
 
 // evaluate density
-float eval_density(float densityCst, float h2, vec3 ri, vec3 rj)
+float eval_density(float h2, vec3 ri, vec3 rj)
 {
 	vec3 rij    = ri - rj;
 	float dist2 = h2 - dot(rij,rij);
-	return step(0.0, dist2) * densityCst * pow(dist2, 3.0);
+	return (step(0.0, dist2) * pow(dist2, 3.0));
 }
 
 
@@ -61,8 +60,7 @@ void main()
 
 			// add contribution
 			if(offset != gl_VertexID)
-				oData.w += eval_density(uDensityConstants,
-				                        uSmoothingLengthSquared,
+				oData.w += eval_density(uSmoothingLengthSquared,
 				                        iData.xyz,
 				                        neighbourPos);
 
@@ -71,6 +69,9 @@ void main()
 		}
 		++i;
 	}
+
+	// mutliply sum by constants
+	oData.w *= uDensityConstants;
 }
 
 #endif // _VERTEX_

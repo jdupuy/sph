@@ -79,6 +79,8 @@ enum // OpenGLNames
 	// transform feedbacks
 	TRANSFORM_FEEDBACK_HEAD = 0,
 	TRANSFORM_FEEDBACK_LIST,
+	TRANSFORM_FEEDBACK_DENSITY_PING,
+	TRANSFORM_FEEDBACK_DENSITY_PONG,
 	TRANSFORM_FEEDBACK_PARTICLE_PING,
 	TRANSFORM_FEEDBACK_PARTICLE_PONG,
 	TRANSFORM_FEEDBACK_COUNT,
@@ -196,7 +198,6 @@ void set_grid_params()
 	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
 	                                        "uBucketCellSize"),
 	                    smoothingLength);
-
 }
 
 
@@ -222,11 +223,11 @@ void set_sph_constants()
 	std::cout << "gradSpiky: " << gradSpiky << std::endl;
 	std::cout << "grad2Viscosity: " << grad2Viscosity << std::endl;
 
-	// set masses
-	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
-	                                        "uParticleMass"),
-	                   particleMass);
+//	// set masses
+//	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
+//	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+//	                                        "uParticleMass"),
+//	                   particleMass);
 
 	// set uniforms: h2
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -238,8 +239,7 @@ void set_sph_constants()
 	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
 	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
 	                                        "uDensityConstants"),
-	                   poly6 * particleMass);
-
+	                   poly6 /* * particleMass */);
 
 	// set min bounds of simulation
 	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
@@ -266,6 +266,7 @@ void set_sph_constants()
 	                   SIM_MIN[0]+smoothingLength*0.5f,
 	                   SIM_MIN[1]+smoothingLength*0.5f,
 	                   SIM_MIN[2]+smoothingLength*0.5f);
+
 
 	// build grid
 	set_grid_params();
@@ -299,6 +300,7 @@ void init_sph_cells()
 // set runtime constants (called only once)
 void set_runtime_constant_uniforms()
 {
+
 	// set cube
 	glProgramUniform4f(programs[PROGRAM_CUBE_RENDER],
 	                   glGetUniformLocation(programs[PROGRAM_CUBE_RENDER],
@@ -325,6 +327,7 @@ void set_runtime_constant_uniforms()
 	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
 	                                        "imgList"),
 	                   TEXTURE_LIST);
+
 }
 
 
@@ -341,17 +344,6 @@ void build_grid()
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
 		glDrawArrays(GL_POINTS, 0, particleCount);
 
-//	glBindBuffer(GL_TEXTURE_BUFFER, buffers[BUFFER_HEAD]);
-//	GLint *ptr = (GLint *) glMapBufferRange(GL_TEXTURE_BUFFER,
-//	                                        0,
-//	                                        sizeof(GLint)*cellCount,
-//	                                        GL_MAP_READ_BIT);
-//	std::cout << "checking..\n";
-//	for(GLuint i=0; i<particleCount; ++i)
-//		if(ptr[i] > -1) std::cout <<"i: " << i << ' '<< ptr[i] << '\n';
-//	std::cout << std::endl;
-//	glUnmapBuffer(GL_TEXTURE_BUFFER);
-
 	glDisable(GL_RASTERIZER_DISCARD);
 //	std::cout << "done\n";
 }
@@ -362,14 +354,29 @@ void init_sph_density()
 	// build grid
 	build_grid();
 
-	// run density kernel compute
-//	glEnable(GL_RASTERIZER_DISCARD);
-//	glUseProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
-//	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
-//	glDrawArrays(GL_POINTS, 0, particleCount);
-//	glDisable(GL_RASTERIZER_DISCARD);
+	// compute densities and store ine TF
+	glEnable(GL_RASTERIZER_DISCARD);
+	glUseProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING + sphPingPong]);
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_DENSITY_PING
+	                                           + sphPingPong]);
+	// set sampler
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	                                 "sParticlePos"),
+	            TEXTURE_POS_DENSITIES_PING + sphPingPong);
 
-	// back to default vertex array
+	// perform TF
+	glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, particleCount);
+	glEndTransformFeedback();
+
+	// ping pong
+	sphPingPong = 1 - sphPingPong;
+
+	// back to defaults
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+	glDisable(GL_RASTERIZER_DISCARD);
 	glBindVertexArray(0);
 }
 
@@ -422,6 +429,66 @@ void init_sph_particles()
 
 	// pre compute densities
 	init_sph_density();
+}
+
+
+// build transform feedbacks
+void set_transform_feedbacks()
+{
+	// transform feedbacks
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_HEAD]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_HEAD],
+		                  0,
+		                  cellCount * sizeof(GLint));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_LIST]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_LIST],
+		                  0,
+		                  particleCount * sizeof(GLint));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PONG],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  1,
+		                  buffers[BUFFER_VELOCITIES_PONG],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PONG]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PING],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  1,
+		                  buffers[BUFFER_VELOCITIES_PING],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_DENSITY_PING]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PONG],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+	                        transformFeedbacks[TRANSFORM_FEEDBACK_DENSITY_PONG]);
+		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
+		                  0,
+		                  buffers[BUFFER_POS_DENSITIES_PING],
+		                  0,
+		                  particleCount*sizeof(Vector4));
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,0);
 }
 
 
@@ -596,14 +663,18 @@ void on_init()
 	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
 	                       "sph_density_init.glsl",
 	                       "",
-	                       GL_TRUE);
-
+	                       GL_FALSE);
+	const GLchar* varyings1[] = {"oData"};
+	glTransformFeedbackVaryings(programs[PROGRAM_SPH_DENSITY_INIT],
+	                            1,
+	                            varyings1,
+	                            GL_INTERLEAVED_ATTRIBS);
+	glLinkProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
 
 	fw::build_glsl_program(programs[PROGRAM_SPH_CELL_INIT],
 	                       "sph_cell_init.glsl",
 	                       "",
 	                       GL_FALSE);
-	const GLchar* varyings1[] = {"oData"};
 	glTransformFeedbackVaryings(programs[PROGRAM_SPH_CELL_INIT],
 	                            1,
 	                            varyings1,
@@ -634,46 +705,8 @@ void on_init()
 	set_runtime_constant_uniforms();
 	set_sph_constants();
 
-	// transform feedbacks
-	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
-	                        transformFeedbacks[TRANSFORM_FEEDBACK_HEAD]);
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  0,
-		                  buffers[BUFFER_HEAD],
-		                  0,
-		                  cellCount * sizeof(GLint));
-	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
-	                        transformFeedbacks[TRANSFORM_FEEDBACK_LIST]);
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  0,
-		                  buffers[BUFFER_LIST],
-		                  0,
-		                  particleCount * sizeof(GLint));
-	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
-	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING]);
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  0,
-		                  buffers[BUFFER_POS_DENSITIES_PONG],
-		                  0,
-		                  particleCount*sizeof(Vector4));
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  1,
-		                  buffers[BUFFER_VELOCITIES_PONG],
-		                  0,
-		                  particleCount*sizeof(Vector4));
-	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
-	                        transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PONG]);
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  0,
-		                  buffers[BUFFER_POS_DENSITIES_PING],
-		                  0,
-		                  particleCount*sizeof(Vector4));
-		glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER,
-		                  1,
-		                  buffers[BUFFER_VELOCITIES_PING],
-		                  0,
-		                  particleCount*sizeof(Vector4));
-	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,0);
+	// set TF
+	set_transform_feedbacks();
 
 	// set particles
 	init_sph_particles();
