@@ -106,6 +106,9 @@ Vector4 Vector4::operator+(const Vector4& v) const
 Vector4 Vector4::operator-(const Vector4& v) const
 {return Vector4(mX-v.mX, mY-v.mY, mZ-v.mZ, mW-v.mW);}
 
+Vector4 Vector4::operator*(const float& s) const
+{return Vector4(mX*s, mY*s, mZ*s, mW*s);}
+
 Vector4 Vector4::operator/(const float& s) const
 {
 #ifndef NDEBUG
@@ -127,6 +130,9 @@ Vector4& Vector4::operator+=(const Vector4& v)
 
 Vector4& Vector4::operator-=(const Vector4& v)
 {mX-=v.mX; mY-=v.mY; mZ-=v.mZ; mW-=v.mW; return (*this);}
+
+Vector4& Vector4::operator*=(const float& s)
+{mX*=s; mY*=s; mZ*=s; mW*=s; return (*this);}
 
 Vector4& Vector4::operator/=(const float& s)
 {

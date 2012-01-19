@@ -121,6 +121,9 @@ Vector3 Vector3::operator+(const Vector3& v) const
 Vector3 Vector3::operator-(const Vector3& v) const
 {return Vector3(mX-v.mX, mY-v.mY, mZ-v.mZ);}
 
+Vector3 Vector3::operator*(const float& s) const
+{return Vector3(mX*s, mY*s, mZ*s);}
+
 Vector3 Vector3::operator/(const float& s) const
 {
 #ifndef NDEBUG
@@ -142,6 +145,9 @@ Vector3& Vector3::operator+=(const Vector3& v)
 
 Vector3& Vector3::operator-=(const Vector3& v)
 {mX-=v.mX; mY-=v.mY; mZ-=v.mZ; return (*this);}
+
+Vector3& Vector3::operator*=(const float& s)
+{mX*=s; mY*=s; mZ*=s; return (*this);}
 
 Vector3& Vector3::operator/=(const float& s)
 {

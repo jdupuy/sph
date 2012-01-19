@@ -118,6 +118,9 @@ Vector2 Vector2::operator+(const Vector2& v) const
 Vector2 Vector2::operator-(const Vector2& v) const
 {return Vector2(mX-v.mX, mY-v.mY);}
 
+Vector2 Vector2::operator*(const float& s) const
+{return Vector2(mX*s, mY*s);}
+
 Vector2 Vector2::operator/(const float& s) const
 {
 #ifndef NDEBUG
@@ -139,6 +142,9 @@ Vector2& Vector2::operator+=(const Vector2& v)
 
 Vector2& Vector2::operator-=(const Vector2& v)
 {mX-=v.mX; mY-=v.mY; return (*this);}
+
+Vector2& Vector2::operator*=(const float& s)
+{mX*=s; mY*=s; return (*this);}
 
 Vector2& Vector2::operator/=(const float& s)
 {
