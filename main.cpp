@@ -86,9 +86,10 @@ enum // OpenGLNames
 	TRANSFORM_FEEDBACK_COUNT,
 
 	// programs
-	PROGRAM_SPH_DENSITY_INIT = 0,
-	PROGRAM_SPH_CELL_INIT,
-	PROGRAM_SPH_GRID,
+	PROGRAM_DENSITY_INIT = 0,
+	PROGRAM_CELL_INIT,
+	PROGRAM_GRID,
+	PROGRAM_FORCE,
 	PROGRAM_FLUID_RENDER,
 	PROGRAM_CUBE_RENDER,
 	PROGRAM_BUCKET_RENDER,
@@ -174,24 +175,24 @@ void set_grid_params()
 	                   bucket3d[0], bucket3d[1]);
 
 	// set 1d
-	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform3fv(programs[PROGRAM_DENSITY_INIT],
+	                    glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                         "uBucket1dCoeffs"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
-	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	glProgramUniform3fv(programs[PROGRAM_GRID],
+	                    glGetUniformLocation(programs[PROGRAM_GRID],
 	                                         "uBucket1dCoeffs"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
 
 	// set cell size
-	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "uBucketCellSize"),
 	                   smoothingLength);
-	glProgramUniform1f(programs[PROGRAM_SPH_GRID],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	glProgramUniform1f(programs[PROGRAM_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_GRID],
 	                                        "uBucketCellSize"),
 	                   smoothingLength);
 	glProgramUniform1f(programs[PROGRAM_BUCKET_RENDER],
@@ -224,38 +225,38 @@ void set_sph_constants()
 	std::cout << "grad2Viscosity: " << grad2Viscosity << std::endl;
 
 //	// set masses
-//	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
-//	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+//	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
+//	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 //	                                        "uParticleMass"),
 //	                   particleMass);
 
 	// set uniforms: h2
-	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "uSmoothingLengthSquared"),
 	                   h2);
 
 	// set uniforms: gradPoly6
-	glProgramUniform1f(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "uDensityConstants"),
 	                   poly6 /* * particleMass */);
 
 	// set min bounds of simulation
-	glProgramUniform3fv(programs[PROGRAM_SPH_DENSITY_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform3fv(programs[PROGRAM_DENSITY_INIT],
+	                    glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                         "uBucketBoundsMin"),
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
 	                    const_cast<Vector3 *>(&SIM_MIN)));
-	glProgramUniform3fv(programs[PROGRAM_SPH_CELL_INIT],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_CELL_INIT],
+	glProgramUniform3fv(programs[PROGRAM_CELL_INIT],
+	                    glGetUniformLocation(programs[PROGRAM_CELL_INIT],
 	                                         "uBucketBoundsMin"),
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
 	                    const_cast<Vector3 *>(&SIM_MIN)));
-	glProgramUniform3fv(programs[PROGRAM_SPH_GRID],
-	                    glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	glProgramUniform3fv(programs[PROGRAM_GRID],
+	                    glGetUniformLocation(programs[PROGRAM_GRID],
 	                                         "uBucketBoundsMin"),
 	                    1,
 	                    reinterpret_cast<GLfloat *>(
@@ -267,7 +268,6 @@ void set_sph_constants()
 	                   SIM_MIN[1]+smoothingLength*0.5f,
 	                   SIM_MIN[2]+smoothingLength*0.5f);
 
-
 	// build grid
 	set_grid_params();
 }
@@ -276,7 +276,7 @@ void set_sph_constants()
 // initialize cells (rasterizer must be disabled)
 void init_sph_cells()
 {
-	glUseProgram(programs[PROGRAM_SPH_CELL_INIT]);
+	glUseProgram(programs[PROGRAM_CELL_INIT]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_CELL_INIT]);
 
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
@@ -311,20 +311,20 @@ void set_runtime_constant_uniforms()
 	                   1.0f);
 
 	// set images
-	glProgramUniform1i(programs[PROGRAM_SPH_GRID],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	glProgramUniform1i(programs[PROGRAM_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_GRID],
 	                                        "imgHead"),
 	                   TEXTURE_HEAD);
-	glProgramUniform1i(programs[PROGRAM_SPH_GRID],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_GRID],
+	glProgramUniform1i(programs[PROGRAM_GRID],
+	                   glGetUniformLocation(programs[PROGRAM_GRID],
 	                                        "imgList"),
 	                   TEXTURE_LIST);
-	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform1i(programs[PROGRAM_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "imgHead"),
 	                   TEXTURE_HEAD);
-	glProgramUniform1i(programs[PROGRAM_SPH_DENSITY_INIT],
-	                   glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glProgramUniform1i(programs[PROGRAM_DENSITY_INIT],
+	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "imgList"),
 	                   TEXTURE_LIST);
 
@@ -340,7 +340,7 @@ void build_grid()
 	init_sph_cells();
 
 	// compute
-	glUseProgram(programs[PROGRAM_SPH_GRID]);
+	glUseProgram(programs[PROGRAM_GRID]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING+sphPingPong]);
 		glDrawArrays(GL_POINTS, 0, particleCount);
 
@@ -356,13 +356,13 @@ void init_sph_density()
 
 	// compute densities and store ine TF
 	glEnable(GL_RASTERIZER_DISCARD);
-	glUseProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
+	glUseProgram(programs[PROGRAM_DENSITY_INIT]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_POS_DENSITY_PING + sphPingPong]);
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK,
 	                        transformFeedbacks[TRANSFORM_FEEDBACK_DENSITY_PING
 	                                           + sphPingPong]);
 	// set sampler
-	glUniform1i(glGetUniformLocation(programs[PROGRAM_SPH_DENSITY_INIT],
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                 "sParticlePos"),
 	            TEXTURE_POS_DENSITIES_PING + sphPingPong);
 
@@ -660,28 +660,33 @@ void on_init()
 	glBindVertexArray(0);
 
 	// configure programs
-	fw::build_glsl_program(programs[PROGRAM_SPH_DENSITY_INIT],
+	fw::build_glsl_program(programs[PROGRAM_DENSITY_INIT],
 	                       "sph_density_init.glsl",
 	                       "",
 	                       GL_FALSE);
 	const GLchar* varyings1[] = {"oData"};
-	glTransformFeedbackVaryings(programs[PROGRAM_SPH_DENSITY_INIT],
+	glTransformFeedbackVaryings(programs[PROGRAM_DENSITY_INIT],
 	                            1,
 	                            varyings1,
 	                            GL_INTERLEAVED_ATTRIBS);
-	glLinkProgram(programs[PROGRAM_SPH_DENSITY_INIT]);
+	glLinkProgram(programs[PROGRAM_DENSITY_INIT]);
 
-	fw::build_glsl_program(programs[PROGRAM_SPH_CELL_INIT],
+	fw::build_glsl_program(programs[PROGRAM_CELL_INIT],
 	                       "sph_cell_init.glsl",
 	                       "",
 	                       GL_FALSE);
-	glTransformFeedbackVaryings(programs[PROGRAM_SPH_CELL_INIT],
+	glTransformFeedbackVaryings(programs[PROGRAM_CELL_INIT],
 	                            1,
 	                            varyings1,
 	                            GL_INTERLEAVED_ATTRIBS);
-	glLinkProgram(programs[PROGRAM_SPH_CELL_INIT]);
+	glLinkProgram(programs[PROGRAM_CELL_INIT]);
 
-	fw::build_glsl_program(programs[PROGRAM_SPH_GRID],
+	fw::build_glsl_program(programs[PROGRAM_FORCE],
+	                       "sph_force.glsl",
+	                       "",
+	                       GL_TRUE);
+
+	fw::build_glsl_program(programs[PROGRAM_GRID],
 	                       "sph_grid.glsl",
 	                       "",
 	                       GL_TRUE);
