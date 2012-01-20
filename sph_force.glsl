@@ -167,9 +167,10 @@ void main()
 	oDensity  = iDensity + density * uInvTicks;
 	oPosition = iPosition + oVelocity * uInvTicks;
 
-	oVelocity = iVelocity;
-	oDensity  = iDensity;
+	// test
 	oPosition = iPosition;
+	oDensity  = iDensity;
+	oVelocity = iVelocity;
 
 }
 

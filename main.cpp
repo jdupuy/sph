@@ -510,8 +510,12 @@ void init_sph_particles()
 		                0,
 		                sizeof(Vector4)*particleCount,
 		                &positions[0]);
-	glBindBuffer(GL_ARRAY_BUFFER,
-	             buffers[BUFFER_VELOCITIES_PING + sphPingPong]);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PING]);
+		glBufferSubData(GL_ARRAY_BUFFER,
+		                0,
+		                sizeof(Vector4)*particleCount,
+		                &velocities[0]);
+	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PONG]);
 		glBufferSubData(GL_ARRAY_BUFFER,
 		                0,
 		                sizeof(Vector4)*particleCount,
@@ -941,18 +945,17 @@ void on_update()
 	                                 "sData1"),
 	            TEXTURE_VELOCITIES_PING + sphPingPong);
 
-	glBindTransformFeedback(
-		GL_TRANSFORM_FEEDBACK,
+	glBindTransformFeedback( GL_TRANSFORM_FEEDBACK,
 		transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING + sphPingPong]
 		);
-	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING+sphPingPong]);
 
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING+sphPingPong]);
 	glBeginTransformFeedback(GL_POINTS);
 		glDrawArrays(GL_POINTS, 0, particleCount);
 	glEndTransformFeedback();
 
 	// ping pong
-	sphPingPong = sphPingPong - 1;
+	sphPingPong = 1 - sphPingPong;
 
 	// restore state
 	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
