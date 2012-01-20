@@ -25,6 +25,9 @@ uniform float uK;                      // constant
 uniform vec3 uSimBoundsMin; // simulation bounds (min)
 uniform vec3 uSimBoundsMax; // simulation bounds (max)
 
+uniform float uStiffness = 200000.0;
+uniform float uDampening = 256.0;
+
 uniform vec3 uGravityDir;   // direction of gravity acceleration
 
 uniform float uTicks;    // dt
@@ -118,10 +121,21 @@ void sph_forces(in vec3 ri,
 	density    *= uDensityConstants;
 }
 
-vec3 boundary_force(in vec3 ri) {
-	// repulse in each direction
-	return (step((ri.y - uSimBoundsMin.y),0.1) * (ri.y - uSimBoundsMin.y) * 2200.5) * vec3(0.0,1.0,0.0);
+vec3 boundary_force(in vec3 ri, in vec3 vi) {
+	vec3 force = vec3(0.0);
+	vec3 d;
 
+	d = ri-uSimBoundsMin;
+	force[0] -= step(d[0], 0.01) * (uStiffness*d[0]-uDampening*vi[0]);
+	force[1] -= step(d[1], 0.01) * (uStiffness*d[1]-uDampening*vi[1]);
+	force[2] -= step(d[2], 0.01) * (uStiffness*d[2]-uDampening*vi[2]);
+
+	d = uSimBoundsMax-ri;
+	force[0] -= step(d[0], 0.0001) * (uStiffness*d[0]+uDampening*vi[0]);
+	force[1] -= step(d[1], 0.0001) * (uStiffness*d[1]+uDampening*vi[1]);
+	force[2] -= step(d[2], 0.0001) * (uStiffness*d[2]+uDampening*vi[2]);
+
+	return force;
 }
 
 vec3 gravity_force() {
@@ -156,7 +170,7 @@ void main()
 
 	// compute forces
 	sph_forces(iPosition, iDensity, iVelocity, fPressure, fViscosity, density);
-	fBoundary = boundary_force(iPosition);
+	fBoundary = boundary_force(iPosition, iVelocity);
 	fGravity  = gravity_force();
 
 	// compute acceleration
