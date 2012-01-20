@@ -109,8 +109,13 @@ GLfloat particleMass    = 1.0f;            // grams
 GLuint particleCount    = MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
+GLfloat deltaT          = 0.001f;
 GLint sphPingPong       = 0;
+GLfloat restDensity     = 1000.0f;
+GLfloat k               = 1.5f;
+GLfloat mu              = 1.0f;
 bool renderBucket       = false;
+
 
 // Tools
 Affine invCameraWorld       = Affine::Translation(Vector3(0,0,-100));
@@ -185,6 +190,11 @@ void set_grid_params()
 	                                         "uBucket1dCoeffs"),
 	                    1,
 	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
+	glProgramUniform3fv(programs[PROGRAM_FORCE],
+	                    glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                         "uBucket1dCoeffs"),
+	                    1,
+	                    reinterpret_cast<GLfloat*>(&bucket1dCoeffs));
 
 	// set cell size
 	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
@@ -199,6 +209,11 @@ void set_grid_params()
 	                   glGetUniformLocation(programs[PROGRAM_BUCKET_RENDER],
 	                                        "uBucketCellSize"),
 	                    smoothingLength);
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uBucketCellSize"),
+	                    smoothingLength);
+
 }
 
 
@@ -224,23 +239,63 @@ void set_sph_constants()
 	std::cout << "gradSpiky: " << gradSpiky << std::endl;
 	std::cout << "grad2Viscosity: " << grad2Viscosity << std::endl;
 
-//	// set masses
-//	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
-//	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
-//	                                        "uParticleMass"),
-//	                   particleMass);
+	// set masses
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uParticleMass"),
+	                   particleMass);
+
+	// set uniforms: h
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uSmoothingLength"),
+	                   smoothingLength);
 
 	// set uniforms: h2
 	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
 	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "uSmoothingLengthSquared"),
 	                   h2);
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uSmoothingLengthSquared"),
+	                   h2);
 
-	// set uniforms: gradPoly6
+	// set uniforms: Poly6
 	glProgramUniform1f(programs[PROGRAM_DENSITY_INIT],
 	                   glGetUniformLocation(programs[PROGRAM_DENSITY_INIT],
 	                                        "uDensityConstants"),
-	                   poly6 /* * particleMass */);
+	                   poly6 * particleMass);
+
+	// gradPoly6
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uDensityConstants"),
+	                   gradPoly6 * particleMass);
+
+	// spiky
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uPressureConstants"),
+	                   -gradSpiky  * particleMass * 0.5f);
+
+	// viscosity
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uViscosityConstants"),
+	                   grad2Viscosity * particleMass * mu);
+
+	// rest density
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uRestDensity"),
+	                   restDensity /* * particleMass */);
+
+	// k constant
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uK"),
+	                   k /* * particleMass */);
 
 	// set min bounds of simulation
 	glProgramUniform3fv(programs[PROGRAM_DENSITY_INIT],
@@ -268,8 +323,42 @@ void set_sph_constants()
 	                   SIM_MIN[1]+smoothingLength*0.5f,
 	                   SIM_MIN[2]+smoothingLength*0.5f);
 
+	// min bounds of domain
+	glProgramUniform3fv(programs[PROGRAM_FORCE],
+	                    glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                         "uSimBoundsMin"),
+	                    1,
+	                    &SIM_BOUNDS_MIN[0]);
+	glProgramUniform3f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uSimBoundsMax"),
+	                    SIM_BOUNDS_MIN[0] + SIMULATION_DOMAIN[0],
+	                    SIM_BOUNDS_MIN[1] + SIMULATION_DOMAIN[1],
+	                    SIM_BOUNDS_MIN[2] + SIMULATION_DOMAIN[2] );
+
 	// build grid
 	set_grid_params();
+}
+
+
+// set delta 
+void set_delta()
+{
+	glProgramUniform1f(programs[PROGRAM_FORCE],
+	                   glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                        "uInvTicks"),
+	                   1.0f/deltaT);
+}
+
+
+// set direction of the gravity acceleration
+void set_gravity_vector()
+{
+	glProgramUniform3fv(programs[PROGRAM_FORCE],
+	                    glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                         "uGravityDir"),
+	                    1,
+	                    &gravityVector[0]);
 }
 
 
@@ -348,6 +437,7 @@ void build_grid()
 //	std::cout << "done\n";
 }
 
+
 // compute densities
 void init_sph_density()
 {
@@ -379,6 +469,7 @@ void init_sph_density()
 	glDisable(GL_RASTERIZER_DISCARD);
 	glBindVertexArray(0);
 }
+
 
 // initialize the particles
 void init_sph_particles()
@@ -684,7 +775,13 @@ void on_init()
 	fw::build_glsl_program(programs[PROGRAM_FORCE],
 	                       "sph_force.glsl",
 	                       "",
-	                       GL_TRUE);
+	                       GL_FALSE);
+	const GLchar* varyings2[] = {"oData0", "oData1"};
+	glTransformFeedbackVaryings(programs[PROGRAM_FORCE],
+	                            1,
+	                            varyings2,
+	                            GL_SEPARATE_ATTRIBS);
+	glLinkProgram(programs[PROGRAM_FORCE]);
 
 	fw::build_glsl_program(programs[PROGRAM_GRID],
 	                       "sph_grid.glsl",
@@ -709,6 +806,8 @@ void on_init()
 	// set constants
 	set_runtime_constant_uniforms();
 	set_sph_constants();
+	set_delta();
+	set_gravity_vector();
 
 	// set TF
 	set_transform_feedbacks();
@@ -830,6 +929,34 @@ void on_update()
 		                        FW_BUFFER_OFFSET(0),
 		                        cellCount);
 	}
+
+	// update attributes
+	glEnable(GL_RASTERIZER_DISCARD);
+
+	glUseProgram(programs[PROGRAM_FORCE]);
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                 "sData0"),
+	            TEXTURE_POS_DENSITIES_PING + sphPingPong);
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                 "sData1"),
+	            TEXTURE_VELOCITIES_PING + sphPingPong);
+
+	glBindTransformFeedback(
+		GL_TRANSFORM_FEEDBACK,
+		transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING + sphPingPong]
+		);
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING+sphPingPong]);
+
+	glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, particleCount);
+	glEndTransformFeedback();
+
+	// ping pong
+	sphPingPong = sphPingPong - 1;
+
+	// restore state
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+	glDisable(GL_RASTERIZER_DISCARD);
 
 	// render particles
 	glUseProgram(programs[PROGRAM_FLUID_RENDER]);

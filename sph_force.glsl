@@ -166,6 +166,11 @@ void main()
 	oVelocity = iVelocity + acceleration * uInvTicks;
 	oDensity  = iDensity + density * uInvTicks;
 	oPosition = iPosition + oVelocity * uInvTicks;
+
+	oVelocity = iVelocity;
+	oDensity  = iDensity;
+	oPosition = iPosition;
+
 }
 
 #endif // _VERTEX_
