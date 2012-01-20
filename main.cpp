@@ -109,7 +109,7 @@ GLfloat particleMass    = 1.0f;            // grams
 GLuint particleCount    = MAX_PARTICLE_COUNT / 2;           // number of particles
 GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
-GLfloat deltaT          = 0.001f;
+GLfloat deltaT          = 0.010f;
 GLint sphPingPong       = 0;
 GLfloat restDensity     = 1000.0f;
 GLfloat k               = 1.5f;
@@ -346,8 +346,8 @@ void set_delta()
 {
 	glProgramUniform1f(programs[PROGRAM_FORCE],
 	                   glGetUniformLocation(programs[PROGRAM_FORCE],
-	                                        "uInvTicks"),
-	                   1.0f/deltaT);
+	                                        "uTicks"),
+	                   deltaT);
 }
 
 

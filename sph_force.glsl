@@ -27,7 +27,7 @@ uniform vec3 uSimBoundsMax; // simulation bounds (max)
 
 uniform vec3 uGravityDir;   // direction of gravity acceleration
 
-uniform float uInvTicks;    // 1 / dt
+uniform float uTicks;    // dt
 
 // compute the pressure for a given density
 float pressure(float k, float d, float d0) {
@@ -120,7 +120,8 @@ void sph_forces(in vec3 ri,
 
 vec3 boundary_force(in vec3 ri) {
 	// repulse in each direction
-	return vec3(0.0);
+	return (step((ri.y - uSimBoundsMin.y),0.1) * (ri.y - uSimBoundsMin.y) * 2200.5) * vec3(0.0,1.0,0.0);
+
 }
 
 vec3 gravity_force() {
@@ -150,7 +151,7 @@ void main()
 	float density   = 0.0;
 	vec3 fPressure  = vec3(0.0);
 	vec3 fViscosity = vec3(0.0);
-	vec3 fBoundary;
+	vec3 fBoundary = vec3(0.0);
 	vec3 fGravity;
 
 	// compute forces
@@ -163,14 +164,9 @@ void main()
 	             / uParticleMass;
 
 	// set attributes
-	oVelocity = iVelocity + acceleration * uInvTicks;
-	oDensity  = iDensity + density * uInvTicks;
-	oPosition = iPosition + oVelocity * uInvTicks;
-
-	// test
-	oPosition = iPosition;
-	oDensity  = iDensity;
-	oVelocity = iVelocity;
+	oDensity  += iDensity + density * uTicks;
+	oVelocity += iVelocity + acceleration * uTicks;
+	oPosition += iPosition + oVelocity * uTicks;
 
 }
 
