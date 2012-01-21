@@ -25,7 +25,7 @@ uniform float uK;                      // constant
 uniform vec3 uSimBoundsMin; // simulation bounds (min)
 uniform vec3 uSimBoundsMax; // simulation bounds (max)
 
-uniform float uStiffness = 200000.0;
+uniform float uStiffness = 10000.0;
 uniform float uDampening = 256.0;
 
 uniform vec3 uGravityDir;   // direction of gravity acceleration
@@ -39,17 +39,19 @@ float pressure(float k, float d, float d0) {
 
 // poly 
 vec3 poly6_coeffs(float h2, vec3 rij) {
-	return rij * pow(vec3(max(h2 - dot(rij,rij),0.0)), vec3(2.0)); 
+//	return rij * pow(vec3(max(h2 - dot(rij,rij),0.0)), vec3(2.0)); 
+	return rij * pow(max(h2 - dot(rij,rij),0.0), 2.0); 
 }
 
 // compute spiky kernel gradient variables
 vec3 spiky_coeffs(float h, vec3 rij, float r) {
-	return rij * pow(max(vec3(h-r),vec3(0.0)), vec3(2.0)) / r;
+//	return rij * pow(max(vec3(h-r),vec3(0.0)), vec3(2.0)) / r;
+	return rij * pow(max(h-r,0.0), 2.0) / r;
 }
 
 // compute viscosity kernel second order gradient variables
 float viscosity_coeffs(float h, float r) {
-	return max(h-r,0.0);
+	return max(h-r, 0.0);
 }
 
 void sph_forces(in vec3 ri,
@@ -60,7 +62,7 @@ void sph_forces(in vec3 ri,
                 out float density) {
 	// variables
 	int buckets1d[27];
-	int i       = 0;     // iterator
+	int iter    = 0;     // iterator
 	int offset  = 0;     // texture offset
 	float invDi = 1.0/di;
 
@@ -76,9 +78,9 @@ void sph_forces(in vec3 ri,
 		                                         uBucket1dCoeffs));
 
 	// loop through neighbours
-	while(i<27) {
+	while(iter<27) {
 		// get offset
-		offset = imageLoad(imgHead, buckets1d[i]).r;
+		offset = imageLoad(imgHead, buckets1d[iter]).r;
 		while(offset != -1) {
 			if(offset != gl_VertexID) { // step(0.0, abs(offset - gl_VertexID));
 				// get neighbour attributes
@@ -87,7 +89,7 @@ void sph_forces(in vec3 ri,
 				vec3 vj  = texelFetch(sData1, offset).rgb;
 
 				// compute rij and vij
-				vec3 rij = ri - rj;
+				vec3 rij = rj - ri;
 				vec3 vij = vj - vi;
 
 				// precompute variables
@@ -95,8 +97,8 @@ void sph_forces(in vec3 ri,
 				float invDj = 1.0/dj;
 
 				// evaluate density
-				density   += dot(vij, poly6_coeffs(uSmoothingLengthSquared,
-				                                   rij));
+//				density    += dot(vij, poly6_coeffs(uSmoothingLengthSquared,
+//				                                    rij));
 
 				// evaluate pressure
 				fPressure  += ( pressure(uK, di, uRestDensity)
@@ -112,11 +114,11 @@ void sph_forces(in vec3 ri,
 			// get next offset (if any)
 			offset = imageLoad(imgList, offset).r;
 		}
-		++i;
+		++iter;
 	}
 
 	// multiply results by constants
-	fPressure  *= (uPressureConstants * -invDi);
+	fPressure  *= (uPressureConstants * invDi);
 	fViscosity *= (uViscosityConstants * invDi);
 	density    *= uDensityConstants;
 }
@@ -126,14 +128,16 @@ vec3 boundary_force(in vec3 ri, in vec3 vi) {
 	vec3 d;
 
 	d = ri-uSimBoundsMin;
-	force[0] -= step(d[0], 0.01) * (uStiffness*d[0]-uDampening*vi[0]);
-	force[1] -= step(d[1], 0.01) * (uStiffness*d[1]-uDampening*vi[1]);
-	force[2] -= step(d[2], 0.01) * (uStiffness*d[2]-uDampening*vi[2]);
+	force += step(d, vec3(0.1)) * (uStiffness*d-uDampening*vi);
+//	force[0] += step(d[0], 0.1) * (uStiffness*d[0]-uDampening*vi[0]);
+//	force[1] += step(d[1], 0.1) * (uStiffness*d[1]-uDampening*vi[1]);
+//	force[2] += step(d[2], 0.1) * (uStiffness*d[2]-uDampening*vi[2]);
 
 	d = uSimBoundsMax-ri;
-	force[0] -= step(d[0], 0.0001) * (uStiffness*d[0]+uDampening*vi[0]);
-	force[1] -= step(d[1], 0.0001) * (uStiffness*d[1]+uDampening*vi[1]);
-	force[2] -= step(d[2], 0.0001) * (uStiffness*d[2]+uDampening*vi[2]);
+	force -= step(d, vec3(0.1)) * (uStiffness*d+uDampening*vi);
+//	force[0] -= step(d[0], 0.1) * (uStiffness*d[0]+uDampening*vi[0]);
+//	force[1] -= step(d[1], 0.1) * (uStiffness*d[1]+uDampening*vi[1]);
+//	force[2] -= step(d[2], 0.1) * (uStiffness*d[2]+uDampening*vi[2]);
 
 	return force;
 }
@@ -165,7 +169,7 @@ void main()
 	float density   = 0.0;
 	vec3 fPressure  = vec3(0.0);
 	vec3 fViscosity = vec3(0.0);
-	vec3 fBoundary = vec3(0.0);
+	vec3 fBoundary  = vec3(0.0);
 	vec3 fGravity;
 
 	// compute forces
@@ -174,13 +178,13 @@ void main()
 	fGravity  = gravity_force();
 
 	// compute acceleration
-	acceleration = (fPressure + fViscosity + fBoundary + fGravity)
+	acceleration = (fPressure /*+ fViscosity*/ + fBoundary + fGravity)
 	             / uParticleMass;
 
 	// set attributes
-	oDensity  += iDensity + density * uTicks;
-	oVelocity += iVelocity + acceleration * uTicks;
-	oPosition += iPosition + oVelocity * uTicks;
+	oDensity  = iDensity;// + density * uTicks;
+	oVelocity = iVelocity + acceleration * uTicks;
+	oPosition = iPosition + oVelocity * uTicks;
 
 }
 

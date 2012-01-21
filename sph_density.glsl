@@ -9,8 +9,8 @@ uniform samplerBuffer sParticlePos;
 
 // uniforms
 uniform vec3  uBucket1dCoeffs;    // for conversion from bucket 3d to bucket 1d
-uniform float uBucketCellSize;    // dimensions of the bucket
 uniform vec3  uBucketBoundsMin;   // constant
+uniform float uBucketCellSize;    // dimensions of the bucket
 uniform float uSmoothingLengthSquared;
 uniform float uDensityConstants;
 
@@ -46,13 +46,13 @@ void main()
 		                                         uBucket1dCoeffs));
 
 	// loop through neighbour particles
-	int i = 0;         // iterator
+	int iter   = 0;    // iterator
 	int offset = 0;    // texture offset
 	vec3 neighbourPos; // neighbour position
-	while(i<27)
+	while(iter<27)
 	{
 		// get offset
-		offset = imageLoad(imgHead, buckets1d[i]).r;
+		offset = imageLoad(imgHead, buckets1d[iter]).r;
 		while(offset != -1)
 		{
 			// get stored particle position
@@ -67,7 +67,7 @@ void main()
 			// next offset
 			offset = imageLoad(imgList, offset).r;
 		}
-		++i;
+		++iter;
 	}
 
 	// mutliply sum by constants
