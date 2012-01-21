@@ -37,7 +37,7 @@ void main()
 #elif defined _DENSITY
 	oColor = vec4(iDensity);
 #else
-	float coeff = smoothstep(2.0, 3.5, iDensity);
+	float coeff = smoothstep(0.1, 1.8, iDensity);
 	oColor.rgb = coeff*vec3(0.0,0.0,1.0) + vec3(1.0-coeff);
 #endif
 }

@@ -38,7 +38,7 @@ const float  PI = 3.14159265f;
 const GLuint MAX_PARTICLE_COUNT = 256u*1024u; // maximum number of particless
 const Vector3 SIMULATION_DOMAIN = Vector3(50.0f,50.0f,50.0f); // centimeters
 const Vector3 SIM_BOUNDS_MIN    = -0.5f*SIMULATION_DOMAIN;
-const float MIN_SMOOTHING_LENGTH = 1.25f;                   // centimeters
+const float MIN_SMOOTHING_LENGTH = 1.15f;                   // centimeters
 const Vector3 BUCKET_3D_MAX   = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
                               + Vector3(2,2,2); // border cells
 const GLuint  BUCKET_1D_MAX   = BUCKET_3D_MAX[0]
@@ -106,14 +106,14 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = MIN_SMOOTHING_LENGTH*2.0f;  // centimeters
 GLfloat particleMass    = 1.0f;            // grams
-GLuint particleCount    = MAX_PARTICLE_COUNT / 32;           // number of particles
+GLuint particleCount    = MAX_PARTICLE_COUNT / 16;           // number of particles
 GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
-GLfloat deltaT          = 0.0065f;
+GLfloat deltaT          = 0.001f;
 GLint sphPingPong       = 0;
-GLfloat restDensity     = 10.0f;
-GLfloat k               = 1.5f;
-GLfloat mu              = 1.0f;
+GLfloat restDensity     = 13.0f;
+GLfloat k               = 1.01f;
+GLfloat mu              = 5.7f;
 bool renderBucket       = false;
 
 
@@ -225,8 +225,8 @@ void set_sph_constants()
 
 //	std::cout << "h6: " << h6 << std::endl;
 //	std::cout << "h9: " << h9 << std::endl;
-//	std::cout << "poly6: " << poly6 << std::endl;
-//	std::cout << "gradPoly6: " << gradPoly6 << std::endl;
+	std::cout << "poly6: " << poly6 << std::endl;
+	std::cout << "gradPoly6: " << gradPoly6 << std::endl;
 //	std::cout << "gradSpiky: " << gradSpiky << std::endl;
 //	std::cout << "grad2Viscosity: " << grad2Viscosity << std::endl;
 
@@ -269,12 +269,14 @@ void set_sph_constants()
 	                   glGetUniformLocation(programs[PROGRAM_FORCE],
 	                                        "uPressureConstants"),
 	                   -gradSpiky  * particleMass * 0.5f);
+std::cout << "pressure: " << -gradSpiky  * particleMass * 0.5f << std::endl;
 
 	// viscosity
 	glProgramUniform1f(programs[PROGRAM_FORCE],
 	                   glGetUniformLocation(programs[PROGRAM_FORCE],
 	                                        "uViscosityConstants"),
 	                   grad2Viscosity * particleMass * mu);
+std::cout << "viscosity: " << grad2Viscosity * particleMass * mu << std::endl;
 
 	// rest density
 	glProgramUniform1f(programs[PROGRAM_FORCE],
@@ -478,7 +480,7 @@ void init_sph_density()
 void init_sph_particles()
 {
 	// variables / constants
-	const float PARTICLE_SPACING = 0.6f; // in meters
+	const float PARTICLE_SPACING = 0.6f; // in centimeters
 	GLuint xCnt = SIMULATION_DOMAIN[0]*0.5f / PARTICLE_SPACING;
 	GLuint zCnt = SIMULATION_DOMAIN[2]*0.5f / PARTICLE_SPACING;
 	GLuint yCnt = particleCount / (xCnt*zCnt)
@@ -488,11 +490,10 @@ void init_sph_particles()
 	                      6.0f*PARTICLE_SPACING,
 	                      SIMULATION_DOMAIN[2]*0.25f);
 	std::vector<Vector4> positions;
-	std::vector<Vector4> velocities;
+	std::vector<Vector4> velocities(particleCount, Vector4::ZERO);
 
 	// reserve memory
 	positions.reserve(particleCount);
-	velocities.reserve(particleCount);
 
 	// set positions
 	for(GLuint y=0; y<yCnt; ++y)
@@ -503,7 +504,6 @@ void init_sph_particles()
 				                            min[1]+y*PARTICLE_SPACING,
 				                            min[2]+z*PARTICLE_SPACING,
 				                            0));
-				velocities.push_back(Vector4::ZERO);
 			}
 
 	// send data to buffers
@@ -742,7 +742,6 @@ void on_init()
 		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PING]);
 		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CUBE_INDEXES]);
 	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PONG]);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -750,7 +749,6 @@ void on_init()
 		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PONG]);
 		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, FW_BUFFER_OFFSET(0));
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CUBE_INDEXES]);
 	glBindVertexArray(0);
 
 	// configure programs
@@ -781,7 +779,7 @@ void on_init()
 	                       GL_FALSE);
 	const GLchar* varyings2[] = {"oData0", "oData1"};
 	glTransformFeedbackVaryings(programs[PROGRAM_FORCE],
-	                            1,
+	                            2,
 	                            varyings2,
 	                            GL_SEPARATE_ATTRIBS);
 	glLinkProgram(programs[PROGRAM_FORCE]);
@@ -823,6 +821,7 @@ void on_init()
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glClearColor(0.13,0.13,0.15,1.0);
+	glPointSize(3.0f);
 
 #ifdef _ANT_ENABLE
 	// start ant
@@ -934,8 +933,8 @@ void on_update()
 	}
 
 	// build grid
-//	build_grid();
-	init_sph_density();
+	build_grid();
+//	init_sph_density();
 
 	// update attributes
 	glEnable(GL_RASTERIZER_DISCARD);
@@ -971,6 +970,23 @@ void on_update()
 
 	// back to default vertex array
 	glBindVertexArray(0);
+
+
+//	glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_VELOCITIES_PING + sphPingPong]);
+//	Vector4 *vp = (Vector4 *)glMapBufferRange(GL_ARRAY_BUFFER,
+//	                                          0,
+//	                                          particleCount * sizeof(Vector4),
+//	                                          GL_MAP_READ_BIT);
+
+//	for(GLuint i =0; i<16; ++i)
+//	{
+//		std::cout << vp[i][0] << ' '
+//		          << vp[i][1] << ' '
+//		          << vp[i][2] << '\n';
+//	}
+
+//	glUnmapBuffer(GL_ARRAY_BUFFER);
+
 
 #ifdef _ANT_ENABLE
 	// stop timing
