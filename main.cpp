@@ -36,7 +36,7 @@
 // Constants
 const float  PI = 3.14159265f;
 const GLuint MAX_PARTICLE_COUNT = 256u*1024u; // maximum number of particless
-const Vector3 SIMULATION_DOMAIN = Vector3(30.0f,50.0f,30.0f); // centimeters
+const Vector3 SIMULATION_DOMAIN = Vector3(30.0f,60.0f,30.0f); // centimeters
 const Vector3 SIM_BOUNDS_MIN    = -0.5f*SIMULATION_DOMAIN;
 const float MIN_SMOOTHING_LENGTH = 1.0f;                   // centimeters
 const Vector3 BUCKET_3D_MAX   = (SIMULATION_DOMAIN/MIN_SMOOTHING_LENGTH).Ceil()
@@ -106,14 +106,14 @@ GLuint *transformFeedbacks = NULL;
 // SPH variables
 GLfloat smoothingLength = MIN_SMOOTHING_LENGTH*3.0f;  // centimeters
 GLfloat particleMass    = 1.0f;                       // grams
-GLuint particleCount    = MAX_PARTICLE_COUNT / 8;     // number of particles
+GLuint particleCount    = MAX_PARTICLE_COUNT / 32;     // number of particles
 GLuint cellCount        = 0;    // number of cells
 Vector3 gravityVector   = Vector3(0,-1,0); // gravity direction
-GLfloat deltaT          = 0.005f;
+GLfloat deltaT          = 0.08f;
 GLint sphPingPong       = 0;
-GLfloat restDensity     = 1.0f;
-GLfloat k               = 5.01f;
-GLfloat mu              = 1.0f;
+GLfloat restDensity     = 0.05f;
+GLfloat k               = 25.01f;
+GLfloat mu              = 10000.015f;
 bool renderBucket       = false;
 
 
@@ -141,6 +141,7 @@ double secondsPerFrame = 0.0; // spf
 Vector3 get_bucket_3d_size()
 {
 	return (SIMULATION_DOMAIN/smoothingLength).Ceil() + Vector3(2.0f,2.0f,2.0f);
+//	return (SIMULATION_DOMAIN/(smoothingLength*2.0f)).Ceil() + Vector3(2.0f,2.0f,2.0f);
 }
 
 
@@ -331,9 +332,9 @@ std::cout << "viscosity: " << grad2Viscosity * particleMass * mu << std::endl;
 	glProgramUniform3f(programs[PROGRAM_FORCE],
 	                   glGetUniformLocation(programs[PROGRAM_FORCE],
 	                                        "uSimBoundsMax"),
-	                    SIM_BOUNDS_MIN[0] + SIMULATION_DOMAIN[0],
-	                    SIM_BOUNDS_MIN[1] + SIMULATION_DOMAIN[1],
-	                    SIM_BOUNDS_MIN[2] + SIMULATION_DOMAIN[2] );
+	                    0.5f*SIMULATION_DOMAIN[0],
+	                    0.5f*SIMULATION_DOMAIN[1],
+	                    0.5f*SIMULATION_DOMAIN[2] );
 
 	// build grid
 	set_grid_params();
@@ -481,15 +482,15 @@ void init_sph_density()
 void init_sph_particles()
 {
 	// variables / constants
-	const float PARTICLE_SPACING = 0.55f; // in centimeters
+	const float PARTICLE_SPACING = 1.1f; // in centimeters
 	GLuint xCnt = SIMULATION_DOMAIN[0]*0.75f / PARTICLE_SPACING;
 	GLuint zCnt = SIMULATION_DOMAIN[2]*0.75f / PARTICLE_SPACING;
 	GLuint yCnt = particleCount / (xCnt*zCnt)
 	            + pow(particleCount % (xCnt*zCnt),0.25f); // rest
 	Vector3 min = SIM_BOUNDS_MIN
-	            + Vector3(SIMULATION_DOMAIN[0]*0.125f,
-	                      2.0f*PARTICLE_SPACING,
-	                      SIMULATION_DOMAIN[2]*0.125f);
+	            + Vector3(SIMULATION_DOMAIN[0]*0.0125f,
+	                      5.0f*PARTICLE_SPACING,
+	                      SIMULATION_DOMAIN[2]*0.0125f);
 	std::vector<Vector4> positions;
 	std::vector<Vector4> velocities(particleCount, Vector4::ZERO);
 
@@ -515,7 +516,7 @@ void init_sph_particles()
 		                sizeof(Vector4)*particleCount,
 		                &positions[0]);
 	glBindBuffer(GL_ARRAY_BUFFER,
-	             buffers[BUFFER_VELOCITIES_PING + 1 - sphPingPong]);
+	             buffers[BUFFER_VELOCITIES_PING + 1-sphPingPong]);
 		glBufferSubData(GL_ARRAY_BUFFER,
 		                0,
 		                sizeof(Vector4)*particleCount,
@@ -523,7 +524,7 @@ void init_sph_particles()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	// pre compute densities
-	init_sph_density();
+//	init_sph_density();
 }
 
 
@@ -935,38 +936,38 @@ void on_update()
 
 	// build grid
 //	build_grid();
-fw::Timer timer;
-timer.Start();
+//fw::Timer timer;
+//timer.Start();
 	init_sph_density();
-timer.Stop();
-std::cout << "time: " << timer.Ticks() << "s \n";
+//timer.Stop();
+//std::cout << "time: " << timer.Ticks() << "s \n";
 
-//	// update attributes
-//	glEnable(GL_RASTERIZER_DISCARD);
+	// update attributes
+	glEnable(GL_RASTERIZER_DISCARD);
 
-//	glUseProgram(programs[PROGRAM_FORCE]);
-//	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
-//	                                 "sData0"),
-//	            TEXTURE_POS_DENSITIES_PING + sphPingPong);
-//	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
-//	                                 "sData1"),
-//	            TEXTURE_VELOCITIES_PING + sphPingPong);
+	glUseProgram(programs[PROGRAM_FORCE]);
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                 "sData0"),
+	            TEXTURE_POS_DENSITIES_PING + sphPingPong);
+	glUniform1i(glGetUniformLocation(programs[PROGRAM_FORCE],
+	                                 "sData1"),
+	            TEXTURE_VELOCITIES_PING + sphPingPong);
 
-//	glBindTransformFeedback( GL_TRANSFORM_FEEDBACK,
-//		transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING + sphPingPong]
-//		);
+	glBindTransformFeedback( GL_TRANSFORM_FEEDBACK,
+		transformFeedbacks[TRANSFORM_FEEDBACK_PARTICLE_PING + sphPingPong]
+		);
 
-//	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING+sphPingPong]);
-//	glBeginTransformFeedback(GL_POINTS);
-//		glDrawArrays(GL_POINTS, 0, particleCount);
-//	glEndTransformFeedback();
+	glBindVertexArray(vertexArrays[VERTEX_ARRAY_FLUID_RENDER_PING+sphPingPong]);
+	glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, particleCount);
+	glEndTransformFeedback();
 
-//	// ping pong
-//	sphPingPong = 1 - sphPingPong;
+	// ping pong
+	sphPingPong = 1 - sphPingPong;
 
-//	// restore state
-//	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
-//	glDisable(GL_RASTERIZER_DISCARD);
+	// restore state
+	glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, 0);
+	glDisable(GL_RASTERIZER_DISCARD);
 
 	// render particles
 	glUseProgram(programs[PROGRAM_FLUID_RENDER]);
