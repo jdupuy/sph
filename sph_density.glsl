@@ -6,6 +6,8 @@ layout(r32i) readonly uniform iimageBuffer imgList;
 
 // samplers
 uniform samplerBuffer sParticlePos;
+//uniform isamplerBuffer imgHead;
+//uniform isamplerBuffer imgList;
 
 // uniforms
 uniform vec3  uBucket1dCoeffs;    // for conversion from bucket 3d to bucket 1d
@@ -53,6 +55,7 @@ void main()
 	{
 		// get offset
 		offset = imageLoad(imgHead, buckets1d[iter]).r;
+//		offset = texelFetch(imgHead, buckets1d[iter]).r;
 		while(offset != -1)
 		{
 			// get stored particle position
@@ -66,6 +69,7 @@ void main()
 
 			// next offset
 			offset = imageLoad(imgList, offset).r;
+//			offset = texelFetch(imgList, offset).r;
 		}
 		++iter;
 	}

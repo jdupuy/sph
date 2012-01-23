@@ -92,15 +92,15 @@ void sph_forces(in vec3 ri,
 				vec3 vj  = texelFetch(sData1, offset).rgb;
 
 				// compute rij and vij
-				vec3 rij = rj - ri;
-				vec3 vij = vj - vi;
+				vec3 rij = ri - rj;
+				vec3 vij = vi - vj;
 
 				// precompute variables
 				float r = length(rij);
 				float invDj = 1.0/dj;
 
 				// evaluate density
-				density    += dot(vij,poly6_coeffs(uSmoothingLengthSquared,
+				density    -= dot(vij,poly6_coeffs(uSmoothingLengthSquared,
 				                                   rij));
 
 				// evaluate pressure
@@ -132,10 +132,10 @@ vec3 boundary_force(in vec3 ri, in vec3 vi) {
 	vec3 d;
 
 	d = ri-uSimBoundsMin;
-	force += step(d, vec3(0.01)) * (uStiffness*d-uDampening*vi);
+	force += step(d, vec3(0.04)) * (uStiffness*d-uDampening*vi);
 
 	d = uSimBoundsMax-ri;
-	force -= step(d, vec3(0.01)) * (uStiffness*d+uDampening*vi);
+	force -= step(d, vec3(0.04)) * (uStiffness*d+uDampening*vi);
 
 	return force;
 }
@@ -144,6 +144,7 @@ vec3 boundary_force(in vec3 ri, in vec3 vi) {
 vec3 gravity_force() {
 	return 9.81 * uGravityDir * uParticleMass;
 }
+
 
 #ifdef _VERTEX_
 
@@ -175,16 +176,16 @@ void main()
 	fGravity  = gravity_force();
 
 	// compute acceleration
-	acceleration = (fPressure + fViscosity + fBoundary + fGravity)
+	acceleration = (/*fPressure +*/ /*fViscosity +*/ fBoundary + fGravity)
 	             / uParticleMass;
 
 	// set attributes
-	oDensity  = iDensity + density * uTicks;
+	oDensity  = iDensity;// + density * uTicks;
 	oVelocity = iVelocity + acceleration * uTicks;
 	oPosition = iPosition + oVelocity * uTicks;
 
 	// check position
-	oPosition = clamp(oPosition, uSimBoundsMin+0.05, uSimBoundsMax-0.05);
+//	oPosition = clamp(oPosition, uSimBoundsMin+0.04, uSimBoundsMax-0.04);
 
 }
 

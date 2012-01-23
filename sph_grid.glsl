@@ -23,16 +23,6 @@ void main()
 	int bucket1d = int(dot(bucket3d, uBucket1dCoeffs));
 
 	// check position in grid
-//	int index = imageAtomicCompSwap(imgHead,
-//	                                bucket1d,
-//	                                -1,
-//	                                gl_VertexID);
-//	while(index != -1)
-//		index = imageAtomicCompSwap(imgList,
-//		                            index,
-//		                            -1,
-//		                            gl_VertexID);
-
 	int index = imageAtomicExchange(imgHead,
 	                                bucket1d,
 	                                gl_VertexID);
@@ -40,7 +30,6 @@ void main()
 		index = imageAtomicExchange(imgList,
 		                            gl_VertexID,
 		                            index);
-
 }
 
 #endif // _VERTEX_
